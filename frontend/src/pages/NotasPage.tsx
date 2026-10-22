@@ -1,3 +1,4 @@
+import { AnoLetivoSelector } from '../components/AnoLetivoSelector'
 import { useEffect, useMemo, useState } from 'react'
 import { BookOpen, ClipboardList, Loader2, Search } from 'lucide-react'
 import { notasApi } from '../api/notas'
@@ -291,6 +292,7 @@ function LancarNotaModal({
 // --- Boletim: consulta por aluno -------------------------------------------------------
 
 function BoletimView() {
+  const [anoLetivo, setAnoLetivo] = useState(() => new Date().getFullYear())
   const [alunoIdInput, setAlunoIdInput] = useState('')
   const [alunoId, setAlunoId] = useState<number | null>(null)
   const [boletim, setBoletim] = useState<BoletimRead | null>(null)
@@ -306,7 +308,7 @@ function BoletimView() {
     setErro(null)
     setBoletim(null)
     try {
-      const data = await notasApi.buscarBoletim(id)
+      const data = await notasApi.buscarBoletim(id, anoLetivo)
       setBoletim(data)
     } catch (err) {
       setErro(apiErrorMessage(err))
@@ -317,7 +319,8 @@ function BoletimView() {
 
   return (
     <div>
-      <form onSubmit={buscar} className="mb-5 flex items-end gap-3">
+      <form onSubmit={buscar} className="mb-5 flex flex-wrap items-end gap-3">
+        <AnoLetivoSelector disabled={loading} value={anoLetivo} onChange={(ano) => {setAnoLetivo(ano); setBoletim(null)}} />
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700">
             ID do aluno

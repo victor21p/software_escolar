@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { AnoLetivoSelector } from '../components/AnoLetivoSelector'
 import { Loader2 } from 'lucide-react'
 import { useAuth } from '../lib/AuthContext'
 import { alunoApi } from '../api/aluno'
@@ -20,18 +21,24 @@ const SITUACAO_LABELS: Record<string, string> = {
 
 export function BoletimPage() {
   const { aluno } = useAuth()
+  const [anoLetivo, setAnoLetivo] = useState(() => new Date().getFullYear())
   const [boletim, setBoletim] = useState<BoletimRead | null>(null)
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState<string | null>(null)
 
   useEffect(() => {
     if (!aluno) return
+    let ignore = false
+    setLoading(true)
+    setErro(null)
+    setBoletim(null)
     alunoApi
-      .boletim(aluno.id)
-      .then(setBoletim)
-      .catch(() => setErro('Não foi possível carregar o boletim.'))
-      .finally(() => setLoading(false))
-  }, [aluno])
+      .boletim(aluno.id, anoLetivo)
+      .then((data) => { if (!ignore) setBoletim(data) })
+      .catch(() => { if (!ignore) setErro('Não foi possível carregar o boletim.') })
+      .finally(() => { if (!ignore) setLoading(false) })
+    return () => { ignore = true }
+  }, [aluno, anoLetivo])
 
   if (loading) {
     return (
@@ -41,14 +48,13 @@ export function BoletimPage() {
     )
   }
 
-  if (erro) {
-    return <p className="rounded-xl bg-red-50 p-4 text-sm text-red-700">{erro}</p>
-  }
 
   return (
     <div className="space-y-4">
       <h1 className="text-lg font-semibold text-slate-900">Boletim</h1>
+      <AnoLetivoSelector value={anoLetivo} onChange={setAnoLetivo} disabled={loading} />
 
+      {erro && <p className="text-sm text-red-700">{erro}</p>}
       {boletim?.disciplinas.length === 0 && (
         <p className="text-sm text-slate-400">Nenhuma nota lançada ainda.</p>
       )}

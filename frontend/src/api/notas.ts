@@ -12,8 +12,8 @@ export const notasApi = {
       .put<NotaRead>(`/notas/turmas/${turmaId}/alunos/${alunoId}`, dados)
       .then((r) => r.data),
 
-  buscarBoletim: (alunoId: number) =>
-    api.get<BoletimRead>(`/notas/alunos/${alunoId}/boletim`).then((r) => r.data),
+  buscarBoletim: (alunoId: number, anoLetivo?: number) =>
+    api.get<BoletimRead>(`/notas/alunos/${alunoId}/boletim`, { params: { ano_letivo: anoLetivo } }).then((r) => r.data),
 
   listarDisciplinas: () => api.get<string[]>('/notas/disciplinas').then((r) => r.data),
 }

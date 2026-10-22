@@ -12,8 +12,8 @@ import type {
 export const alunoApi = {
   eu: () => api.get<AlunoRead>('/pessoas/alunos/eu').then((r) => r.data),
 
-  boletim: (alunoId: number) =>
-    api.get<BoletimRead>(`/notas/alunos/${alunoId}/boletim`).then((r) => r.data),
+  boletim: (alunoId: number, anoLetivo?: number) =>
+    api.get<BoletimRead>(`/notas/alunos/${alunoId}/boletim`, { params: { ano_letivo: anoLetivo } }).then((r) => r.data),
 
   frequencia: (alunoId: number, de: string, ate: string) =>
     api

@@ -38,5 +38,6 @@ def get_boletim(
     aluno_id: int,
     db: DbSession,
     user: CurrentUser = Depends(require_roles(*permissions.CAN_VER_BOLETIM)),
+    ano_letivo: int | None = Query(None, ge=2020, le=2100),
 ) -> BoletimRead:
-    return service.get_boletim(db, aluno_id, user)
+    return service.get_boletim(db, aluno_id, user, ano_letivo=ano_letivo)

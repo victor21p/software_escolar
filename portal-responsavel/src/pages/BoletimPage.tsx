@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { AnoLetivoSelector } from '../components/AnoLetivoSelector'
 import { Loader2 } from 'lucide-react'
 import { notasApi } from '../api/notas'
 import { apiErrorMessage, isNotFound } from '../api/client'
@@ -10,6 +11,7 @@ import { SemAcesso } from '../components/SemAcesso'
 
 export function BoletimPage() {
   const { filhoAtivo } = useFilho()
+  const [anoLetivo, setAnoLetivo] = useState(() => new Date().getFullYear())
   const [boletim, setBoletim] = useState<BoletimRead | null>(null)
   const [loading, setLoading] = useState(true)
   const [semAcesso, setSemAcesso] = useState(false)
@@ -17,24 +19,29 @@ export function BoletimPage() {
 
   useEffect(() => {
     if (!filhoAtivo) return
+    let ignore = false
+    setBoletim(null)
     setLoading(true)
     setErro(null)
     setSemAcesso(false)
     notasApi
-      .boletim(filhoAtivo.id)
-      .then(setBoletim)
+      .boletim(filhoAtivo.id, anoLetivo)
+      .then((data) => { if (!ignore) setBoletim(data) })
       .catch((err) => {
+        if (ignore) return
         if (isNotFound(err)) setSemAcesso(true)
         else setErro(apiErrorMessage(err))
       })
-      .finally(() => setLoading(false))
-  }, [filhoAtivo])
+      .finally(() => { if (!ignore) setLoading(false) })
+    return () => { ignore = true }
+  }, [filhoAtivo, anoLetivo])
 
   if (!filhoAtivo) return <p className="text-slate-500">Selecione um filho.</p>
 
   return (
     <div>
       <PageHeader title="Boletim" subtitle={`Notas de ${filhoAtivo.nome}`} />
+      <AnoLetivoSelector value={anoLetivo} onChange={setAnoLetivo} disabled={loading} />
 
       {erro && (
         <p className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</p>

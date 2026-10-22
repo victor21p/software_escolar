@@ -87,5 +87,6 @@ class BoletimDisciplina(OutputSchema):
 
 
 class BoletimRead(OutputSchema):
+    ano_letivo: int
     aluno_id: int
     disciplinas: list[BoletimDisciplina] = Field(default_factory=list)

@@ -316,3 +316,7 @@ class AtualizarAvisoInput(AvisoUpdate):
 
 class AvisoIdInput(InputSchema):
     aviso_id: int
+
+
+class BoletimInput(AlunoIdInput):
+    ano_letivo: int | None = Field(default=None, ge=2020, le=2100)

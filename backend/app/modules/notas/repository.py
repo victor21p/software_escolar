@@ -22,8 +22,9 @@ def list_notas_turma(db: Session, turma_id: int, periodo: Periodo) -> list[Nota]
     return list(db.scalars(stmt).all())
 
 
-def list_notas_aluno(db: Session, aluno_id: int) -> list[Nota]:
-    stmt = select(Nota).where(Nota.aluno_id == aluno_id)
+def list_notas_aluno(db: Session, aluno_id: int, turma_ids: list[int]) -> list[Nota]:
+    stmt = select(Nota).where(Nota.aluno_id == aluno_id, Nota.turma_id.in_(turma_ids))
+    stmt = stmt.order_by(Nota.lancado_em, Nota.id)
     return list(db.scalars(stmt).all())
 
 

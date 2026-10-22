@@ -110,6 +110,7 @@ export interface BoletimDisciplina {
 }
 
 export interface BoletimRead {
+  ano_letivo: number
   aluno_id: number
   disciplinas: BoletimDisciplina[]
 }

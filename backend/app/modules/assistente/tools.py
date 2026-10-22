@@ -334,8 +334,8 @@ def _listar_disciplinas(_: ToolContext, __: s.SemArgumentos) -> Any:
     return {"disciplinas": notas_service.list_disciplinas()}
 
 
-def _obter_boletim(ctx: ToolContext, a: s.AlunoIdInput) -> Any:
-    return notas_service.get_boletim(ctx.db, a.aluno_id, ctx.user)
+def _obter_boletim(ctx: ToolContext, a: s.BoletimInput) -> Any:
+    return notas_service.get_boletim(ctx.db, a.aluno_id, ctx.user, ano_letivo=a.ano_letivo)
 
 
 def _ver_grade_notas(ctx: ToolContext, a: s.GradeNotasInput) -> dict[str, Any]:
@@ -1100,8 +1100,8 @@ _CATALOGO: list[Tool] = [
         "obter_boletim",
         "Boletim do aluno",
         "Boletim: notas por disciplina e bimestre, média e situação (aprovado/recuperação/"
-        "reprovado).",
-        s.AlunoIdInput,
+        "reprovado). Informe ano_letivo para histórico; o padrão é o ano atual.",
+        s.BoletimInput,
         perm.ACADEMICO_E_FAMILIA,
         _obter_boletim,
     ),

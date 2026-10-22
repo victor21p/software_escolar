@@ -22,6 +22,7 @@ from app.modules.notas.schemas import (
 )
 from app.modules.pessoas import service as pessoas_service
 from app.modules.turmas import service as turmas_service
+from app.shared import clock
 
 
 def _ensure_pode_lancar(db: Session, turma_id: int, user: CurrentUser) -> None:
@@ -84,6 +85,7 @@ def upsert_nota(
         )
         repository.add(db, nota)
     else:
+        nota.lancado_em = clock.now()
         nota.valor = data.valor
         nota.observacao = data.observacao
         nota.lancado_por_user_id = user.id
@@ -110,13 +112,21 @@ def _situacao(media: float | None) -> str:
     return "REPROVADO"
 
 
-def get_boletim(db: Session, aluno_id: int, user: CurrentUser) -> BoletimRead:
+def get_boletim(
+    db: Session, aluno_id: int, user: CurrentUser, *, ano_letivo: int | None = None
+) -> BoletimRead:
     if user.role in (Role.RESPONSAVEL, Role.ALUNO):
         pessoas_service.ensure_can_access_aluno(db, user, aluno_id)
     else:
         pessoas_service.get_aluno_read(db, aluno_id)  # 404 se não existir
 
-    notas = repository.list_notas_aluno(db, aluno_id)
+    ano_letivo = ano_letivo if ano_letivo is not None else clock.today().year
+    turmas = turmas_service.list_turmas(db, ano_letivo=ano_letivo, serie=None, ativa=None)
+    # Transferência: no mesmo ano/disciplina/bimestre, vale o lançamento mais recente.
+    ultimas = {(n.disciplina, n.periodo): n for n in repository.list_notas_aluno(
+        db, aluno_id, [t.id for t in turmas]
+    )}
+    notas = list(ultimas.values())
     notas_por_disciplina: dict[str, list[Nota]] = {}
     for nota in notas:
         notas_por_disciplina.setdefault(nota.disciplina, []).append(nota)
@@ -137,7 +147,7 @@ def get_boletim(db: Session, aluno_id: int, user: CurrentUser) -> BoletimRead:
             )
         )
     disciplinas.sort(key=lambda d: d.disciplina)
-    return BoletimRead(aluno_id=aluno_id, disciplinas=disciplinas)
+    return BoletimRead(aluno_id=aluno_id, ano_letivo=ano_letivo, disciplinas=disciplinas)
 
 
 def list_disciplinas() -> list[str]:
