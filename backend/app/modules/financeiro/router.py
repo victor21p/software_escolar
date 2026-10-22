@@ -9,13 +9,13 @@ from app.core.deps import CurrentUser, DbSession, require_roles
 from app.core.exceptions import BusinessRuleError, NotFoundError, UnauthorizedError
 from app.core.roles import Role
 from app.modules.financeiro import permissions, service
-from app.modules.financeiro.models import StatusCobranca
 from app.modules.financeiro.schemas import (
     BolsaCreate,
     BolsaRead,
     BolsaUpdate,
     CobrancaCreate,
     CobrancaRead,
+    StatusCobranca,
     TabelaPrecoCreate,
     TabelaPrecoRead,
     TabelaPrecoUpdate,

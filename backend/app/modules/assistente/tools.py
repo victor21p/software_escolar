@@ -121,6 +121,8 @@ def clean_schema(schema: dict[str, Any]) -> dict[str, Any]:
         return limpo
 
     resultado = resolve({k: v for k, v in schema.items() if k != "$defs"})
+    if not isinstance(resultado, dict):
+        raise ValueError("O schema precisa ser um objeto.")
     resultado.setdefault("type", "object")
     resultado.setdefault("properties", {})
     return resultado

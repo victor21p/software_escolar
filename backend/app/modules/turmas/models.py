@@ -16,9 +16,7 @@ class Turma(TimestampMixin, Base):
     __tablename__ = "turmas"
     __table_args__ = (
         UniqueConstraint("serie", "ano_letivo", "turno"),
-        CheckConstraint(
-            f"capacidade BETWEEN 1 AND {CAPACIDADE_MAXIMA}", name="capacidade_maxima"
-        ),
+        CheckConstraint(f"capacidade BETWEEN 1 AND {CAPACIDADE_MAXIMA}", name="capacidade_maxima"),
         CheckConstraint(
             "vagas_ocupadas >= 0 AND vagas_ocupadas <= capacidade", name="vagas_ocupadas_validas"
         ),

@@ -54,9 +54,7 @@ def get_turma(db: Session, turma_id: int, user: CurrentUser) -> TurmaRead:
 
 def create_turma(db: Session, data: TurmaCreate) -> TurmaRead:
     if repository.find_turma(db, data.serie, data.ano_letivo, data.turno) is not None:
-        raise ConflictError(
-            "Já existe turma desta série, turno e ano letivo.", "TURMA_JA_EXISTE"
-        )
+        raise ConflictError("Já existe turma desta série, turno e ano letivo.", "TURMA_JA_EXISTE")
     turma = Turma(**data.model_dump(), vagas_ocupadas=0, ativa=True)
     repository.add(db, turma)
     db.commit()

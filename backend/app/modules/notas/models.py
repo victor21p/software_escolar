@@ -15,9 +15,7 @@ class Nota(TimestampMixin, Base):
     """
 
     __tablename__ = "notas"
-    __table_args__ = (
-        UniqueConstraint("aluno_id", "turma_id", "disciplina", "periodo"),
-    )
+    __table_args__ = (UniqueConstraint("aluno_id", "turma_id", "disciplina", "periodo"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     aluno_id: Mapped[int] = mapped_column(ForeignKey("alunos.id"), index=True)

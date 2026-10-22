@@ -24,15 +24,14 @@ from app.modules.financeiro.schemas import (
 )
 from app.modules.matricula import service as matricula_service
 from app.modules.pessoas import service as pessoas_service
-from app.shared.events import MatriculaAprovada
 from app.shared import clock
+from app.shared.events import MatriculaAprovada
 from app.shared.pagination import Page
 from app.shared.serie import Serie
 
 COBRANCA_NAO_ENCONTRADA = "Cobrança não encontrada."
 BOLSA_NAO_ENCONTRADA = "Bolsa não encontrada."
 PRECO_NAO_ENCONTRADO = "Tabela de preço não encontrada."
-
 
 
 # --- Helpers de conversão ------------------------------------------------------------------
@@ -53,9 +52,7 @@ def _cobranca_read(cobranca: Cobranca) -> CobrancaRead:
     return read
 
 
-def _get_cobranca_or_404(
-    db: Session, cobranca_id: int, *, for_update: bool = False
-) -> Cobranca:
+def _get_cobranca_or_404(db: Session, cobranca_id: int, *, for_update: bool = False) -> Cobranca:
     cobranca = repository.get_cobranca(db, cobranca_id, for_update=for_update)
     if cobranca is None:
         raise NotFoundError(COBRANCA_NAO_ENCONTRADA)
@@ -128,7 +125,7 @@ def update_preco(db: Session, preco_id: int, data: TabelaPrecoUpdate) -> TabelaP
 
 
 def criar_cobranca_avulsa(db: Session, data: CobrancaCreate) -> CobrancaRead:
-    """Cria uma cobrança avulsa (MATRICULA ou TAXA_EXTRA): sem bolsa, valor_final = valor_original."""
+    """Cria cobrança avulsa sem bolsa: valor_final = valor_original."""
     pessoas_service.get_aluno_read(db, data.aluno_id)  # 404 se não existir
     cobranca = Cobranca(
         aluno_id=data.aluno_id,
@@ -153,7 +150,9 @@ def _vencimento_da_competencia(competencia: str) -> date:
             raise ValueError
         return date(ano, mes, min(max(settings.dia_vencimento_mensalidade, 1), 28))
     except ValueError as exc:
-        raise BusinessRuleError("Informe uma competência válida (AAAA-MM).", "COMPETENCIA_INVALIDA") from exc
+        raise BusinessRuleError(
+            "Informe uma competência válida (AAAA-MM).", "COMPETENCIA_INVALIDA"
+        ) from exc
 
 
 def gerar_mensalidades(db: Session, competencia: str) -> list[CobrancaRead]:
@@ -166,17 +165,26 @@ def gerar_mensalidades(db: Session, competencia: str) -> list[CobrancaRead]:
             continue
         preco = repository.find_preco(db, matricula.serie.value, matricula.ano_letivo)
         if preco is None:
-            raise BusinessRuleError("Cadastre o preço da série e ano letivo.", "PRECO_NAO_CADASTRADO")
+            raise BusinessRuleError(
+                "Cadastre o preço da série e ano letivo.", "PRECO_NAO_CADASTRADO"
+            )
         percentual = calcular_bolsa_ativa(db, matricula.aluno_id, vencimento)
         valor = preco.valor_mensalidade
         desconto = (valor * percentual / Decimal("100")).quantize(Decimal("0.01"))
-        cobranca = repository.add_mensalidade_if_absent(db, {
-            "aluno_id": matricula.aluno_id, "matricula_id": matricula.id,
-            "tipo": TipoCobranca.MENSALIDADE, "competencia": competencia,
-            "valor_original": valor, "valor_desconto": desconto,
-            "valor_final": valor - desconto, "vencimento": vencimento,
-            "status": StatusCobranca.PENDENTE,
-        })
+        cobranca = repository.add_mensalidade_if_absent(
+            db,
+            {
+                "aluno_id": matricula.aluno_id,
+                "matricula_id": matricula.id,
+                "tipo": TipoCobranca.MENSALIDADE,
+                "competencia": competencia,
+                "valor_original": valor,
+                "valor_desconto": desconto,
+                "valor_final": valor - desconto,
+                "vencimento": vencimento,
+                "status": StatusCobranca.PENDENTE,
+            },
+        )
         if cobranca is not None:
             criadas.append(_cobranca_read(cobranca))
     db.commit()
@@ -205,19 +213,26 @@ def list_cobrancas(
     )
 
 
-def marcar_cobranca_paga(db: Session, cobranca_id: int, user: CurrentUser | None = None) -> CobrancaRead:
+def marcar_cobranca_paga(
+    db: Session, cobranca_id: int, user: CurrentUser | None = None
+) -> CobrancaRead:
     cobranca = _get_cobranca_or_404(db, cobranca_id, for_update=True)
     if cobranca.status == StatusCobranca.PAGA:
         return _cobranca_read(cobranca)
     if cobranca.status == StatusCobranca.CANCELADA:
-        raise ConflictError(
-            "Cobrança cancelada não pode ser paga.", "COBRANCA_CANCELADA"
-        )
+        raise ConflictError("Cobrança cancelada não pode ser paga.", "COBRANCA_CANCELADA")
     cobranca.status = StatusCobranca.PAGA
     cobranca.pago_em = clock.now()
     db.flush()
-    events.publish(db, CobrancaPaga(cobranca_id=cobranca.id, aluno_id=cobranca.aluno_id,
-                     matricula_id=cobranca.matricula_id, tipo=cobranca.tipo.value))
+    events.publish(
+        db,
+        CobrancaPaga(
+            cobranca_id=cobranca.id,
+            aluno_id=cobranca.aluno_id,
+            matricula_id=cobranca.matricula_id,
+            tipo=cobranca.tipo.value,
+        ),
+    )
     db.commit()
     return _cobranca_read(cobranca)
 
@@ -239,8 +254,11 @@ def create_cobranca_matricula(
     if preco is None:
         raise BusinessRuleError("Cadastre o preço da série e ano letivo.", "PRECO_NAO_CADASTRADO")
     cobranca = Cobranca(
-        aluno_id=aluno_id, matricula_id=matricula_id, tipo=TipoCobranca.MATRICULA,
-        valor_original=preco.valor_matricula, valor_desconto=Decimal("0"),
+        aluno_id=aluno_id,
+        matricula_id=matricula_id,
+        tipo=TipoCobranca.MATRICULA,
+        valor_original=preco.valor_matricula,
+        valor_desconto=Decimal("0"),
         valor_final=preco.valor_matricula,
         vencimento=clock.today() + timedelta(days=settings.dias_vencimento_matricula),
         status=StatusCobranca.PENDENTE,
@@ -250,12 +268,24 @@ def create_cobranca_matricula(
         cobranca.status = StatusCobranca.PAGA
         cobranca.pago_em = clock.now()
         db.flush()
-        events.publish(db, CobrancaPaga(cobranca_id=cobranca.id, aluno_id=aluno_id,
-                         matricula_id=matricula_id, tipo=cobranca.tipo.value))
+        events.publish(
+            db,
+            CobrancaPaga(
+                cobranca_id=cobranca.id,
+                aluno_id=aluno_id,
+                matricula_id=matricula_id,
+                tipo=cobranca.tipo.value,
+            ),
+        )
     return _cobranca_read(cobranca)
 
 
 def on_matricula_aprovada(db: Session, event: MatriculaAprovada) -> None:
     """Cria a taxa na transação da aprovação, sem dependência circular e sem commit."""
-    create_cobranca_matricula(db, matricula_id=event.matricula_id, aluno_id=event.aluno_id,
-                            serie=event.serie, ano_letivo=event.ano_letivo)
+    create_cobranca_matricula(
+        db,
+        matricula_id=event.matricula_id,
+        aluno_id=event.aluno_id,
+        serie=event.serie,
+        ano_letivo=event.ano_letivo,
+    )

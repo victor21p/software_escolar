@@ -54,9 +54,7 @@ def create_evento(
         if data.turma_id is None or not turmas_service.is_professor_da_turma(
             db, data.turma_id, user.id
         ):
-            raise ForbiddenError(
-                "Professores só podem criar eventos para turmas em que lecionam."
-            )
+            raise ForbiddenError("Professores só podem criar eventos para turmas em que lecionam.")
     elif data.turma_id is not None:
         # Garante que a turma existe (404 se não); ADMIN/SECRETARIA podem criar eventos
         # gerais ou de qualquer turma.

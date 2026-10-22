@@ -418,6 +418,10 @@ def test_include_deleted_keeps_history_visible_to_family(db):
     with pytest.raises(NotFoundError):
         service.ensure_can_access_aluno(db, as_user(mae), aluno.id)
     service.ensure_can_access_aluno(db, as_user(mae), aluno.id, include_deleted=True)
-    service.ensure_can_access_aluno(db, current_user(Role.SECRETARIA), aluno.id, include_deleted=True)
+    service.ensure_can_access_aluno(
+        db, current_user(Role.SECRETARIA), aluno.id, include_deleted=True
+    )
     assert service.list_alunos_reads(db, [aluno.id]) == []
-    assert [a.id for a in service.list_alunos_reads(db, [aluno.id], include_deleted=True)] == [aluno.id]
+    assert [a.id for a in service.list_alunos_reads(db, [aluno.id], include_deleted=True)] == [
+        aluno.id
+    ]

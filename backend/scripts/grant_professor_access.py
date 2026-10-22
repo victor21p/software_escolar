@@ -8,7 +8,7 @@ from app.modules.pessoas.models import Professor
 
 PROFESSOR_ID = 20
 EMAIL = "leticia.rodrigues@semeando.edu.br"
-PASSWORD = "professor123"  # noqa: S105
+PASSWORD = "professor123"
 
 
 def main() -> None:

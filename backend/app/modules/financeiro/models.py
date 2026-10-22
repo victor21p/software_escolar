@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from decimal import Decimal
 from enum import StrEnum
 
 from sqlalchemy import (
@@ -7,18 +8,17 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Numeric,
     String,
     UniqueConstraint,
-    Index,
-    text,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base, TimestampMixin
 from app.shared.clock import now as clock_now
-from decimal import Decimal
 
 
 class TipoCobranca(StrEnum):
@@ -64,8 +64,15 @@ class Bolsa(TimestampMixin, Base):
 
 class Cobranca(Base):
     __tablename__ = "cobrancas"
-    __table_args__ = (Index("uq_cobrancas_mensalidade_aluno_competencia", "aluno_id", "competencia",
-                           unique=True, postgresql_where=text("tipo = 'MENSALIDADE'")),)
+    __table_args__ = (
+        Index(
+            "uq_cobrancas_mensalidade_aluno_competencia",
+            "aluno_id",
+            "competencia",
+            unique=True,
+            postgresql_where=text("tipo = 'MENSALIDADE'"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     aluno_id: Mapped[int] = mapped_column(ForeignKey("alunos.id"), index=True)
@@ -83,4 +90,6 @@ class Cobranca(Base):
     )
     pago_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     gateway_referencia: Mapped[str | None] = mapped_column(String(100), default=None)
-    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), default=clock_now)
+    criado_em: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), default=clock_now
+    )

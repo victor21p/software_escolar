@@ -14,7 +14,7 @@ from app.core.security import hash_password
 from app.modules.auth.models import User
 
 ADMIN_EMAIL = "admin@semeando.edu.br"
-ADMIN_PASSWORD = "admin1234"  # noqa: S105 — só para ambiente local de desenvolvimento
+ADMIN_PASSWORD = "admin1234"
 ADMIN_NOME = "Admin Semeando"
 
 

@@ -29,22 +29,106 @@ ANO_LETIVO = 2026
 HOJE = date(2026, 10, 9)
 
 NOMES_M = [
-    "João", "Pedro", "Lucas", "Gabriel", "Matheus", "Rafael", "Gustavo", "Felipe",
-    "Bruno", "Thiago", "Rodrigo", "Carlos", "Eduardo", "Marcos", "André", "Diego",
-    "Vitor", "Daniel", "Ricardo", "Fernando", "Leonardo", "Henrique", "Caio", "Davi",
-    "Miguel", "Arthur", "Heitor", "Bernardo", "Theo", "Enzo", "Samuel", "Noah",
+    "João",
+    "Pedro",
+    "Lucas",
+    "Gabriel",
+    "Matheus",
+    "Rafael",
+    "Gustavo",
+    "Felipe",
+    "Bruno",
+    "Thiago",
+    "Rodrigo",
+    "Carlos",
+    "Eduardo",
+    "Marcos",
+    "André",
+    "Diego",
+    "Vitor",
+    "Daniel",
+    "Ricardo",
+    "Fernando",
+    "Leonardo",
+    "Henrique",
+    "Caio",
+    "Davi",
+    "Miguel",
+    "Arthur",
+    "Heitor",
+    "Bernardo",
+    "Theo",
+    "Enzo",
+    "Samuel",
+    "Noah",
 ]
 NOMES_F = [
-    "Maria", "Ana", "Juliana", "Fernanda", "Patricia", "Camila", "Beatriz", "Larissa",
-    "Amanda", "Carla", "Renata", "Simone", "Isabela", "Gabriela", "Laura", "Sofia",
-    "Valentina", "Helena", "Alice", "Manuela", "Luiza", "Julia", "Lavínia", "Cecilia",
-    "Mariana", "Leticia", "Bianca", "Natalia", "Sabrina", "Vanessa", "Priscila", "Debora",
+    "Maria",
+    "Ana",
+    "Juliana",
+    "Fernanda",
+    "Patricia",
+    "Camila",
+    "Beatriz",
+    "Larissa",
+    "Amanda",
+    "Carla",
+    "Renata",
+    "Simone",
+    "Isabela",
+    "Gabriela",
+    "Laura",
+    "Sofia",
+    "Valentina",
+    "Helena",
+    "Alice",
+    "Manuela",
+    "Luiza",
+    "Julia",
+    "Lavínia",
+    "Cecilia",
+    "Mariana",
+    "Leticia",
+    "Bianca",
+    "Natalia",
+    "Sabrina",
+    "Vanessa",
+    "Priscila",
+    "Debora",
 ]
 SOBRENOMES = [
-    "Silva", "Santos", "Oliveira", "Souza", "Rodrigues", "Ferreira", "Alves", "Pereira",
-    "Lima", "Gomes", "Costa", "Ribeiro", "Martins", "Carvalho", "Almeida", "Lopes",
-    "Soares", "Fernandes", "Vieira", "Barbosa", "Rocha", "Dias", "Monteiro", "Cardoso",
-    "Reis", "Araujo", "Castro", "Andrade", "Nascimento", "Moreira", "Nunes", "Marques",
+    "Silva",
+    "Santos",
+    "Oliveira",
+    "Souza",
+    "Rodrigues",
+    "Ferreira",
+    "Alves",
+    "Pereira",
+    "Lima",
+    "Gomes",
+    "Costa",
+    "Ribeiro",
+    "Martins",
+    "Carvalho",
+    "Almeida",
+    "Lopes",
+    "Soares",
+    "Fernandes",
+    "Vieira",
+    "Barbosa",
+    "Rocha",
+    "Dias",
+    "Monteiro",
+    "Cardoso",
+    "Reis",
+    "Araujo",
+    "Castro",
+    "Andrade",
+    "Nascimento",
+    "Moreira",
+    "Nunes",
+    "Marques",
 ]
 
 SERIES_ORDEM: list[tuple[Serie, int]] = [
@@ -60,8 +144,15 @@ SERIES_ORDEM: list[tuple[Serie, int]] = [
 ]
 TURNOS = [Turno.MANHA, Turno.TARDE, Turno.INTEGRAL]
 FORMACOES = [
-    "Pedagogia", "Letras", "Matemática", "Educação Física", "Artes",
-    "Ciências Biológicas", "História", "Geografia", "Normal Superior",
+    "Pedagogia",
+    "Letras",
+    "Matemática",
+    "Educação Física",
+    "Artes",
+    "Ciências Biológicas",
+    "História",
+    "Geografia",
+    "Normal Superior",
 ]
 
 
@@ -91,7 +182,18 @@ def _nome_completo(masculino: bool) -> str:
 
 def _email(nome: str, seed: int) -> str:
     slug = nome.lower().replace(" ", ".")
-    for a, b in [("á", "a"), ("ã", "a"), ("â", "a"), ("é", "e"), ("ê", "e"), ("í", "i"), ("ó", "o"), ("õ", "o"), ("ú", "u"), ("ç", "c")]:
+    for a, b in [
+        ("á", "a"),
+        ("ã", "a"),
+        ("â", "a"),
+        ("é", "e"),
+        ("ê", "e"),
+        ("í", "i"),
+        ("ó", "o"),
+        ("õ", "o"),
+        ("ú", "u"),
+        ("ç", "c"),
+    ]:
         slug = slug.replace(a, b)
     return f"{slug}{seed}@email.com"
 
@@ -100,14 +202,19 @@ def main() -> None:
     with SessionLocal() as db:
         ja_tem = db.query(Aluno).count()
         if ja_tem >= 500:
-            print(f"Já existem {ja_tem} alunos no banco. Nada a fazer (script é só para popular um banco vazio).")
+            print(
+                f"Já existem {ja_tem} alunos no banco. Nada a fazer (script é só "
+                f"para popular um banco vazio)."
+            )
             return
 
         print("Criando turmas...")
         turmas: dict[tuple[Serie, Turno], Turma] = {}
         for serie, _idade in SERIES_ORDEM:
             for turno in TURNOS:
-                t = Turma(serie=serie, ano_letivo=ANO_LETIVO, turno=turno, capacidade=30, vagas_ocupadas=0)
+                t = Turma(
+                    serie=serie, ano_letivo=ANO_LETIVO, turno=turno, capacidade=30, vagas_ocupadas=0
+                )
                 db.add(t)
                 turmas[(serie, turno)] = t
         db.flush()
@@ -138,10 +245,11 @@ def main() -> None:
         alunos_criados = 0
         matriculas_criadas = 0
         rng_cpf_resp = 100_000_000
-        rng_cpf_aluno = 300_000_000
 
-        for i in range(TOTAL_ALUNOS):
-            serie, idade = random.choices(SERIES_ORDEM, weights=[10, 10, 11, 11, 13, 13, 12, 11, 9])[0]
+        for _ in range(TOTAL_ALUNOS):
+            serie, idade = random.choices(
+                SERIES_ORDEM, weights=[10, 10, 11, 11, 13, 13, 12, 11, 9]
+            )[0]
             turno = random.choice(TURNOS)
             masculino = random.random() < 0.5
             nome_aluno = _nome_completo(masculino)
@@ -224,7 +332,8 @@ def main() -> None:
         db.commit()
         print(
             f"Pronto: {alunos_criados} alunos, {len(responsaveis_pool)} responsáveis, "
-            f"{len(professores)} professores, {len(turmas)} turmas, {matriculas_criadas} matrículas."
+            f"{len(professores)} professores, {len(turmas)} turmas, "
+            f"{matriculas_criadas} matrículas."
         )
 
 

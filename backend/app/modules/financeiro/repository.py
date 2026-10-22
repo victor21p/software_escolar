@@ -1,10 +1,10 @@
 from datetime import date
 
 from sqlalchemy import Select, case, func, select
-from app.shared import clock
 from sqlalchemy.orm import Session
 
 from app.modules.financeiro.models import Bolsa, Cobranca, StatusCobranca, TabelaPreco, TipoCobranca
+from app.shared import clock
 
 
 def add(db: Session, entity: object) -> None:
@@ -39,7 +39,7 @@ def find_mensalidade(db: Session, aluno_id: int, competencia: str) -> Cobranca |
 
 def _cobrancas_stmt(
     *, aluno_id: int | None, aluno_ids: list[int] | None, status: StatusCobranca | None
-) -> Select[tuple[Cobranca]]:
+) -> Select[Cobranca]:
     stmt = select(Cobranca)
     if aluno_id is not None:
         stmt = stmt.where(Cobranca.aluno_id == aluno_id)
@@ -47,8 +47,12 @@ def _cobrancas_stmt(
         stmt = stmt.where(Cobranca.aluno_id.in_(aluno_ids))
     if status is not None:
         status_efetivo = case(
-            ((Cobranca.status == StatusCobranca.PENDENTE) & (Cobranca.vencimento < clock.today()),
-             StatusCobranca.ATRASADA.value), else_=Cobranca.status,
+            (
+                (Cobranca.status == StatusCobranca.PENDENTE)
+                & (Cobranca.vencimento < clock.today()),
+                StatusCobranca.ATRASADA.value,
+            ),
+            else_=Cobranca.status,
         )
         stmt = stmt.where(status_efetivo == status.value)
     return stmt.order_by(Cobranca.vencimento.desc())
@@ -125,9 +129,15 @@ def list_precos(db: Session) -> list[TabelaPreco]:
 
 def add_mensalidade_if_absent(db: Session, values: dict[str, object]) -> Cobranca | None:
     """O índice parcial arbitra duas gerações simultâneas sem duplicar cobrança."""
-    from sqlalchemy.dialects.postgresql import insert
     from sqlalchemy import text
-    stmt = insert(Cobranca).values(**values).on_conflict_do_nothing(
-        index_elements=["aluno_id", "competencia"], index_where=text("tipo = 'MENSALIDADE'")
-    ).returning(Cobranca)
+    from sqlalchemy.dialects.postgresql import insert
+
+    stmt = (
+        insert(Cobranca)
+        .values(**values)
+        .on_conflict_do_nothing(
+            index_elements=["aluno_id", "competencia"], index_where=text("tipo = 'MENSALIDADE'")
+        )
+        .returning(Cobranca)
+    )
     return db.scalar(stmt)

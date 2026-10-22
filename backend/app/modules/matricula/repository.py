@@ -83,9 +83,7 @@ def list_aluno_ids_por_status_na_turma(
     return list(db.scalars(stmt).all())
 
 
-def get_documento(
-    db: Session, matricula_id: int, tipo: TipoDocumento
-) -> DocumentoMatricula | None:
+def get_documento(db: Session, matricula_id: int, tipo: TipoDocumento) -> DocumentoMatricula | None:
     return db.scalar(
         select(DocumentoMatricula).where(
             DocumentoMatricula.matricula_id == matricula_id, DocumentoMatricula.tipo == tipo
@@ -94,14 +92,23 @@ def get_documento(
 
 
 def list_ativas_do_ano(db: Session, ano_letivo: int) -> list[Matricula]:
-    return list(db.scalars(select(Matricula).where(
-        Matricula.ano_letivo == ano_letivo, Matricula.status == StatusMatricula.ATIVA
-    )).all())
+    return list(
+        db.scalars(
+            select(Matricula).where(
+                Matricula.ano_letivo == ano_letivo, Matricula.status == StatusMatricula.ATIVA
+            )
+        ).all()
+    )
 
 
 def list_turma_ids_ativas_dos_alunos(db: Session, aluno_ids: list[int]) -> list[int]:
-    stmt = select(Matricula.turma_id).where(
-        Matricula.aluno_id.in_(aluno_ids), Matricula.status == StatusMatricula.ATIVA,
-        Matricula.turma_id.is_not(None),
-    ).distinct()
+    stmt = (
+        select(Matricula.turma_id)
+        .where(
+            Matricula.aluno_id.in_(aluno_ids),
+            Matricula.status == StatusMatricula.ATIVA,
+            Matricula.turma_id.is_not(None),
+        )
+        .distinct()
+    )
     return [tid for tid in db.scalars(stmt) if tid is not None]

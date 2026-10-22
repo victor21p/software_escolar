@@ -104,9 +104,7 @@ def contar_nao_lidos(db: Session, user: CurrentUser) -> NaoLidosTotal:
 def create_aviso(db: Session, data: AvisoCreate, user: CurrentUser) -> AvisoRead:
     if user.role == Role.PROFESSOR:
         if data.publico_alvo != PublicoAlvo.TURMA or data.turma_id is None:
-            raise ForbiddenError(
-                "Professores só podem publicar avisos para a própria turma."
-            )
+            raise ForbiddenError("Professores só podem publicar avisos para a própria turma.")
         if not turmas_service.is_professor_da_turma(db, data.turma_id, user.id):
             raise ForbiddenError("Você não leciona nesta turma.")
     if data.turma_id is not None:
@@ -165,7 +163,8 @@ def delete_aviso(db: Session, aviso_id: int, user: CurrentUser) -> None:
 def marcar_lido(db: Session, aviso_id: int, user: CurrentUser) -> None:
     aviso = _get_or_404(db, aviso_id)
     if not _ve_tudo(user) and not (
-        aviso.publico_alvo in _publicos_visiveis(user) or (
+        aviso.publico_alvo in _publicos_visiveis(user)
+        or (
             aviso.publico_alvo == PublicoAlvo.TURMA
             and aviso.turma_id in _turma_ids_visiveis(db, user)
         )

@@ -1,4 +1,5 @@
 """Eventos imutáveis trocados entre matrícula e financeiro."""
+
 from dataclasses import dataclass
 
 from app.shared.serie import Serie

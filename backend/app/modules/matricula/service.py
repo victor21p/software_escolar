@@ -59,8 +59,7 @@ MATRICULA_NAO_ENCONTRADA = "Matrícula não encontrada."
 def _to_reads(db: Session, matriculas: list[Matricula]) -> list[MatriculaRead]:
     aluno_ids = list({m.aluno_id for m in matriculas})
     nomes = {
-        a.id: a.nome
-        for a in pessoas_service.list_alunos_reads(db, aluno_ids, include_deleted=True)
+        a.id: a.nome for a in pessoas_service.list_alunos_reads(db, aluno_ids, include_deleted=True)
     }
     turmas = {
         tid: turmas_service.get_turma_read(db, tid).nome
@@ -170,7 +169,8 @@ def _link_responsaveis(
         if actor.role == Role.RESPONSAVEL:
             # Um responsável nunca altera dados de outra pessoa já cadastrada: só cria novos.
             if entrada.cpf == proprio_cpf:
-                assert proprio_id is not None
+                if proprio_id is None:
+                    raise ForbiddenError("Responsável não cadastrado.")
                 responsavel_id = proprio_id
             else:
                 responsavel_id = pessoas_service.create_responsavel_record(db, entrada).id
@@ -193,7 +193,8 @@ def create_pre_matricula(
     aluno_id, tipo = _resolve_aluno(db, data, actor)
 
     if tipo == TipoMatricula.REMATRICULA:
-        assert aluno_id is not None
+        if aluno_id is None:
+            raise BusinessRuleError("Informe o aluno da rematrícula.", "ALUNO_AUSENTE")
         if repository.get_em_aberto(db, aluno_id, data.ano_letivo) is not None:
             raise ConflictError(
                 f"O aluno já possui matrícula em aberto para {data.ano_letivo}.",
@@ -214,7 +215,8 @@ def create_pre_matricula(
                 "Informe os responsáveis, com exatamente 1 responsável financeiro.",
                 "RESPONSAVEIS_INVALIDOS",
             )
-        assert data.aluno is not None
+        if data.aluno is None:
+            raise BusinessRuleError("Informe os dados do aluno.", "ALUNO_AUSENTE")
         aluno_id = pessoas_service.create_aluno_record(db, data.aluno).id
         _link_responsaveis(db, aluno_id, data.responsaveis, actor)
 
@@ -301,7 +303,9 @@ def approve_matricula(
         )
     turma = turmas_service.get_turma_read(db, data.turma_id)
     if (turma.serie, turma.ano_letivo, turma.turno) != (
-        matricula.serie, matricula.ano_letivo, matricula.turno
+        matricula.serie,
+        matricula.ano_letivo,
+        matricula.turno,
     ):
         raise BusinessRuleError(
             "A turma escolhida não é da mesma série e ano letivo da matrícula.",
@@ -315,10 +319,15 @@ def approve_matricula(
     matricula.decidido_por_user_id = actor.id
     matricula.decidido_em = clock.now()
     _transition(matricula, S.AGUARDANDO_PAGAMENTO)
-    events.publish(db, MatriculaAprovada(
-        matricula_id=matricula.id, aluno_id=matricula.aluno_id,
-        serie=matricula.serie, ano_letivo=matricula.ano_letivo,
-    ))
+    events.publish(
+        db,
+        MatriculaAprovada(
+            matricula_id=matricula.id,
+            aluno_id=matricula.aluno_id,
+            serie=matricula.serie,
+            ano_letivo=matricula.ano_letivo,
+        ),
+    )
 
     record_audit(
         db,
@@ -500,8 +509,15 @@ def on_cobranca_paga(db: Session, event: CobrancaPaga) -> None:
         return
     before = snapshot(matricula, AUDIT_FIELDS)
     _transition(matricula, S.ATIVA)
-    record_audit(db, actor=None, action="matricula.ativar", entity="matricula",
-                 entity_id=matricula.id, before=before, after=snapshot(matricula, AUDIT_FIELDS))
+    record_audit(
+        db,
+        actor=None,
+        action="matricula.ativar",
+        entity="matricula",
+        entity_id=matricula.id,
+        before=before,
+        after=snapshot(matricula, AUDIT_FIELDS),
+    )
     db.flush()
 
 

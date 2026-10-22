@@ -27,7 +27,7 @@ BASE = "/api/v1/assistente"
 def _nova_conversa(client, headers) -> int:
     resp = client.post(f"{BASE}/conversas", headers=headers)
     assert resp.status_code == 201
-    return resp.json()["id"]
+    return int(resp.json()["id"])
 
 
 def _enviar(client, headers, conversa_id: int, mensagem: str = "oi"):
@@ -259,7 +259,8 @@ def test_confirm_executes_once_and_audits(client, db, admin, aluno, turma, usar_
         admin.id,
     )
     log = db.scalar(select(AuditLog).where(AuditLog.action == "assistente.lancar_nota"))
-    assert log is not None and log.actor_user_id == admin.id
+    assert log is not None
+    assert log.actor_user_id == admin.id
 
     # segundo clique não executa de novo
     again = client.post(f"{BASE}/acoes/{acao['id']}/confirmar", headers=headers)
@@ -283,7 +284,8 @@ def test_editing_an_existing_nota_shows_old_and_new_value(
     assert "5 → 9" in segunda["resumo"]
     client.post(f"{BASE}/acoes/{segunda['id']}/confirmar", headers=headers)
     notas = _notas(db)
-    assert len(notas) == 1 and float(notas[0].valor) == 9
+    assert len(notas) == 1
+    assert float(notas[0].valor) == 9
 
 
 def test_cancel_does_nothing_and_blocks_later_confirm(client, db, admin, aluno, turma, usar_llm):
@@ -451,7 +453,8 @@ def test_chamada_flow_gives_presence_after_confirmation(
 
     assert client.post(f"{BASE}/acoes/{acao['id']}/confirmar", headers=headers).status_code == 200
     registro = db.scalar(select(Frequencia))
-    assert registro is not None and registro.aluno_id == aluno.id
+    assert registro is not None
+    assert registro.aluno_id == aluno.id
 
 
 def test_excluir_aluno_is_admin_only_and_destructive(client, db, aluno, usar_llm):
@@ -515,8 +518,17 @@ def test_message_validation(client, admin):
 
 def test_assistant_refuses_student_outside_turma(client, db, admin, turma, usar_llm):
     aluno_sem_matricula = make_aluno(db)
-    fake = usar_llm(chamar("lancar_nota", turma_id=turma.id, aluno_id=aluno_sem_matricula.id,
-                         disciplina="Artes", periodo="BIMESTRE_1", valor=7), texto("Sem vínculo."))
+    fake = usar_llm(
+        chamar(
+            "lancar_nota",
+            turma_id=turma.id,
+            aluno_id=aluno_sem_matricula.id,
+            disciplina="Artes",
+            periodo="BIMESTRE_1",
+            valor=7,
+        ),
+        texto("Sem vínculo."),
+    )
     headers = headers_of(admin)
     conversa_id = _nova_conversa(client, headers)
     response = _enviar(client, headers, conversa_id)

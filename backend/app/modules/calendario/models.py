@@ -21,7 +21,5 @@ class EventoCalendario(TimestampMixin, Base):
     data_inicio: Mapped[date] = mapped_column(Date, index=True)
     data_fim: Mapped[date | None] = mapped_column(Date, default=None)
     tipo: Mapped[TipoEvento] = mapped_column(Enum(TipoEvento, native_enum=False, length=20))
-    turma_id: Mapped[int | None] = mapped_column(
-        ForeignKey("turmas.id"), default=None, index=True
-    )
+    turma_id: Mapped[int | None] = mapped_column(ForeignKey("turmas.id"), default=None, index=True)
     criado_por_user_id: Mapped[int] = mapped_column(Integer)

@@ -1,6 +1,7 @@
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.modules.comunicacao.models import Aviso, LeituraAviso
 from app.modules.comunicacao.schemas import PublicoAlvo
@@ -10,8 +11,10 @@ def get_aviso(db: Session, aviso_id: int) -> Aviso | None:
     return db.get(Aviso, aviso_id)
 
 
-def _visibility_filter(stmt, *, publicos: list[PublicoAlvo], turma_ids: list[int]):
-    conditions = [Aviso.publico_alvo.in_(publicos)]
+def _visibility_filter[T](
+    stmt: Select[T], *, publicos: list[PublicoAlvo], turma_ids: list[int]
+) -> Select[T]:
+    conditions: list[ColumnElement[bool]] = [Aviso.publico_alvo.in_(publicos)]
     if turma_ids:
         conditions.append((Aviso.publico_alvo == PublicoAlvo.TURMA) & Aviso.turma_id.in_(turma_ids))
     from sqlalchemy import or_

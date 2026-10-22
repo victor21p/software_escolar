@@ -64,7 +64,9 @@ def list_grade(db: Session, turma_id: int, periodo: Periodo, user: CurrentUser) 
                     observacao=nota.observacao if nota else None,
                 )
             )
-    return TurmaGradeRead(turma_id=turma_id, periodo=periodo, disciplinas=DISCIPLINAS, celulas=celulas)
+    return TurmaGradeRead(
+        turma_id=turma_id, periodo=periodo, disciplinas=DISCIPLINAS, celulas=celulas
+    )
 
 
 def upsert_nota(
@@ -123,9 +125,10 @@ def get_boletim(
     ano_letivo = ano_letivo if ano_letivo is not None else clock.today().year
     turmas = turmas_service.list_turmas(db, ano_letivo=ano_letivo, serie=None, ativa=None)
     # Transferência: no mesmo ano/disciplina/bimestre, vale o lançamento mais recente.
-    ultimas = {(n.disciplina, n.periodo): n for n in repository.list_notas_aluno(
-        db, aluno_id, [t.id for t in turmas]
-    )}
+    ultimas = {
+        (n.disciplina, n.periodo): n
+        for n in repository.list_notas_aluno(db, aluno_id, [t.id for t in turmas])
+    }
     notas = list(ultimas.values())
     notas_por_disciplina: dict[str, list[Nota]] = {}
     for nota in notas:

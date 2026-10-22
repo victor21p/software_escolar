@@ -49,8 +49,9 @@ def turma(db: Session) -> Turma:
 
 @pytest.fixture
 def aluno(db: Session, turma: Turma):
-    from tests.factories import make_matricula
     from app.modules.matricula.schemas import StatusMatricula
+    from tests.factories import make_matricula
+
     aluno = make_aluno(db, nome="Joana Souza")
     make_matricula(db, aluno, turma, status=StatusMatricula.ATIVA, documentos=False)
     return aluno
@@ -67,6 +68,9 @@ def professor_da_turma(db: Session, turma: Turma):
 @pytest.fixture
 def matricula_ativa(db: Session, aluno, turma: Turma):
     from sqlalchemy import select
+
     from app.modules.matricula.models import Matricula
-    return db.scalar(select(Matricula).where(Matricula.aluno_id == aluno.id,
-                                            Matricula.turma_id == turma.id))
+
+    return db.scalar(
+        select(Matricula).where(Matricula.aluno_id == aluno.id, Matricula.turma_id == turma.id)
+    )

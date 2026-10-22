@@ -118,7 +118,7 @@ flowchart TD
     matricula --> pessoas
     matricula --> turmas
     matricula --> farda
-    matricula --> financeiro
+    financeiro --> matricula
     notas --> pessoas
     notas --> turmas
     notas --> matricula
@@ -132,12 +132,13 @@ flowchart TD
     assistente --> portal
     assistente --> materiais
     assistente --> obrigacoes
-    financeiro -. "evento CobrancaPaga" .-> matricula
+    matricula -. "evento MatriculaAprovada (shared/events.py)" .-> financeiro
+    financeiro -. "evento CobrancaPaga (shared/events.py)" .-> matricula
 ```
 
 Quando um módulo precisa *reagir* a algo de um módulo do qual ele não pode depender (porque
 criaria ciclo), use **eventos de domínio** (`app/core/events.py`). Exemplo: o `financeiro`
-publica `CobrancaPaga`; o `matricula` (que já depende do financeiro) se inscreve no evento e
+publica `CobrancaPaga`; o `matricula` se inscreve no evento compartilhado e
 ativa a matrícula. O handler roda na mesma transação de quem publicou.
 
 **Os dados que cruzam fronteiras de módulo são schemas (`*Read`), nunca models do SQLAlchemy.**
@@ -207,7 +208,7 @@ Nunca devolva stack trace nem mensagem interna (o handler genérico responde `IN
   e ficam registrados no banco, o que permite revogá-los (logout, desativação de usuário).
 - O front guarda o access token **só em memória**.
 - Senhas: **Argon2** (`argon2-cffi`). Nunca logue senha ou token.
-- **RBAC**: perfis `ADMIN` (direção), `SECRETARIA`, `FINANCEIRO`, `PROFESSOR`, `RESPONSAVEL`.
+- **RBAC**: perfis `ADMIN` (direção), `SECRETARIA`, `FINANCEIRO`, `PROFESSOR`, `RESPONSAVEL`, `ALUNO`.
   A checagem de perfil é feita no router com `Depends(require_roles(...))`, usando as tuplas
   definidas no `permissions.py` do módulo:
 

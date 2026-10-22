@@ -12,7 +12,7 @@ Uso (dentro do ambiente da API):
 import random
 import secrets
 import sys
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import func, select
@@ -38,7 +38,7 @@ from app.modules.matricula.models import Matricula
 from app.modules.matricula.schemas import StatusMatricula
 from app.modules.notas.models import Nota
 from app.modules.notas.schemas import DISCIPLINAS, Periodo
-from app.modules.pessoas.models import Aluno, Funcionario, Professor
+from app.modules.pessoas.models import Funcionario, Professor
 from app.modules.pessoas.schemas import TipoFuncionario
 from app.modules.turmas.models import Turma, TurmaProfessor
 from app.shared.serie import Serie
@@ -93,8 +93,12 @@ PRECOS = {  # série: (matrícula, mensalidade)
 }
 
 MOTIVOS_BOLSA = [
-    "Bolsa irmãos", "Bolsa mérito acadêmico", "Convênio empresa parceira",
-    "Bolsa social", "Desconto funcionário", "Bolsa esportiva",
+    "Bolsa irmãos",
+    "Bolsa mérito acadêmico",
+    "Convênio empresa parceira",
+    "Bolsa social",
+    "Desconto funcionário",
+    "Bolsa esportiva",
 ]
 
 
@@ -132,7 +136,7 @@ def _nota(base: float, bimestre: int) -> float:
 
 
 def _dt(d: date, hora: int = 9) -> datetime:
-    return datetime(d.year, d.month, d.day, hora, 0, tzinfo=timezone.utc)
+    return datetime(d.year, d.month, d.day, hora, 0, tzinfo=UTC)
 
 
 def secao_funcionarios(db) -> None:
@@ -177,7 +181,9 @@ def secao_logins(db) -> list[tuple[str, str, str]]:
         if db.scalar(select(User).where(User.email == email)):
             continue
         senha = secrets.token_urlsafe(9)
-        user = User(email=email, nome=nome, password_hash=hash_password(senha), role=role, is_active=True)
+        user = User(
+            email=email, nome=nome, password_hash=hash_password(senha), role=role, is_active=True
+        )
         db.add(user)
         db.flush()
         if professor is not None:
@@ -192,7 +198,11 @@ def secao_precos(db) -> None:
         print("[precos] já existem — pulando")
         return
     for serie, (mat, mens) in PRECOS.items():
-        db.add(TabelaPreco(serie=serie.value, ano_letivo=ANO, valor_matricula=mat, valor_mensalidade=mens))
+        db.add(
+            TabelaPreco(
+                serie=serie.value, ano_letivo=ANO, valor_matricula=mat, valor_mensalidade=mens
+            )
+        )
     print(f"[precos] {len(PRECOS)} criados")
 
 
@@ -211,7 +221,9 @@ def _alunos_ativos(db) -> list[tuple[int, int, int, Serie]]:
 
 
 def secao_bolsas_cobrancas(db, ativos) -> None:
-    if db.scalar(select(func.count()).select_from(Bolsa)) or db.scalar(select(func.count()).select_from(Cobranca)):
+    if db.scalar(select(func.count()).select_from(Bolsa)) or db.scalar(
+        select(func.count()).select_from(Cobranca)
+    ):
         print("[financeiro] já existem bolsas/cobranças — pulando")
         return
 
@@ -241,9 +253,15 @@ def secao_bolsas_cobrancas(db, ativos) -> None:
         venc_mat = date(ANO, 1, 15)
         db.add(
             Cobranca(
-                aluno_id=aluno_id, matricula_id=matricula_id, tipo=TipoCobranca.MATRICULA,
-                competencia=None, valor_original=preco_mat, valor_desconto=Decimal(0),
-                valor_final=preco_mat, vencimento=venc_mat, status=StatusCobranca.PAGA,
+                aluno_id=aluno_id,
+                matricula_id=matricula_id,
+                tipo=TipoCobranca.MATRICULA,
+                competencia=None,
+                valor_original=preco_mat,
+                valor_desconto=Decimal(0),
+                valor_final=preco_mat,
+                vencimento=venc_mat,
+                status=StatusCobranca.PAGA,
                 pago_em=_dt(venc_mat - timedelta(days=random.randint(0, 5)), 14),
                 gateway_referencia=f"fake-{secrets.token_hex(6)}",
             )
@@ -265,18 +283,33 @@ def secao_bolsas_cobrancas(db, ativos) -> None:
                     status = StatusCobranca.PAGA
                     pago_em = _dt(venc - timedelta(days=random.randint(0, 6)), 11)
                 else:
-                    status = StatusCobranca.ATRASADA if venc < HOJE - timedelta(days=5) else StatusCobranca.PENDENTE
+                    status = (
+                        StatusCobranca.ATRASADA
+                        if venc < HOJE - timedelta(days=5)
+                        else StatusCobranca.PENDENTE
+                    )
             else:
                 status = StatusCobranca.PAGA
-                atraso = random.randint(1, 12) if perfil == "atrasa" and random.random() < 0.5 else -random.randint(0, 8)
+                atraso = (
+                    random.randint(1, 12)
+                    if perfil == "atrasa" and random.random() < 0.5
+                    else -random.randint(0, 8)
+                )
                 pago_em = _dt(min(venc + timedelta(days=atraso), HOJE), 10)
             if status == StatusCobranca.PAGA:
                 ref = f"fake-{secrets.token_hex(6)}"
             db.add(
                 Cobranca(
-                    aluno_id=aluno_id, matricula_id=matricula_id, tipo=TipoCobranca.MENSALIDADE,
-                    competencia=comp, valor_original=preco_mens, valor_desconto=desconto,
-                    valor_final=final, vencimento=venc, status=status, pago_em=pago_em,
+                    aluno_id=aluno_id,
+                    matricula_id=matricula_id,
+                    tipo=TipoCobranca.MENSALIDADE,
+                    competencia=comp,
+                    valor_original=preco_mens,
+                    valor_desconto=desconto,
+                    valor_final=final,
+                    vencimento=venc,
+                    status=status,
+                    pago_em=pago_em,
                     gateway_referencia=ref,
                 )
             )
@@ -304,16 +337,23 @@ def secao_notas(db, ativos) -> None:
         for disc in DISCIPLINAS:
             afinidade = random.gauss(0, 0.8)
             for bim, periodo in enumerate(
-                [Periodo.BIMESTRE_1, Periodo.BIMESTRE_2, Periodo.BIMESTRE_3, Periodo.BIMESTRE_4], start=1
+                [Periodo.BIMESTRE_1, Periodo.BIMESTRE_2, Periodo.BIMESTRE_3, Periodo.BIMESTRE_4],
+                start=1,
             ):
                 if bim == 4 and disc not in ("Português", "Matemática"):
                     continue  # 4º bimestre em andamento: só as provas já aplicadas
                 valor = _nota(habilidade + afinidade, bim)
                 db.add(
                     Nota(
-                        aluno_id=aluno_id, turma_id=turma_id, disciplina=disc, periodo=periodo,
-                        valor=valor, lancado_por_user_id=lancador,
-                        observacao="Precisa de reforço" if valor < 5 and random.random() < 0.4 else None,
+                        aluno_id=aluno_id,
+                        turma_id=turma_id,
+                        disciplina=disc,
+                        periodo=periodo,
+                        valor=valor,
+                        lancado_por_user_id=lancador,
+                        observacao="Precisa de reforço"
+                        if valor < 5 and random.random() < 0.4
+                        else None,
                     )
                 )
                 n += 1
@@ -336,12 +376,20 @@ def secao_frequencia(db, ativos) -> None:
                 status, obs = StatusFrequencia.FALTA, None
             elif r < p_falta:
                 status = StatusFrequencia.FALTA_JUSTIFICADA
-                obs = random.choice(["Atestado médico", "Consulta médica", "Viagem em família", "Doença"])
+                obs = random.choice(
+                    ["Atestado médico", "Consulta médica", "Viagem em família", "Doença"]
+                )
             else:
                 status, obs = StatusFrequencia.PRESENTE, None
             rows.append(
-                {"aluno_id": aluno_id, "turma_id": turma_id, "data": d, "status": status,
-                 "observacao": obs, "lancado_por_user_id": ADMIN_ID}
+                {
+                    "aluno_id": aluno_id,
+                    "turma_id": turma_id,
+                    "data": d,
+                    "status": status,
+                    "observacao": obs,
+                    "lancado_por_user_id": ADMIN_ID,
+                }
             )
         if len(rows) >= 20_000:
             db.bulk_insert_mappings(Frequencia, rows)
@@ -359,30 +407,141 @@ def secao_calendario(db, turmas: list[int]) -> None:
     for d, nome in FERIADOS.items():
         eventos.append((nome, None, d, None, TipoEvento.FERIADO, None))
     eventos += [
-        ("Início do ano letivo", "Boas-vindas a alunos e famílias.", date(2026, 2, 2), None, TipoEvento.EVENTO, None),
-        ("Reunião de pais — 1º bimestre", "Entrega de boletins e conversa com professores.", date(2026, 4, 18), None, TipoEvento.REUNIAO, None),
-        ("Reunião de pais — 2º bimestre", "Entrega de boletins e conversa com professores.", date(2026, 6, 27), None, TipoEvento.REUNIAO, None),
-        ("Reunião de pais — 3º bimestre", "Entrega de boletins e conversa com professores.", date(2026, 9, 26), None, TipoEvento.REUNIAO, None),
-        ("Reunião de pais — 4º bimestre", "Entrega de boletins finais.", date(2026, 12, 12), None, TipoEvento.REUNIAO, None),
-        ("Festa Junina", "Quadrilha, comidas típicas e brincadeiras. Traje caipira.", date(2026, 6, 20), None, TipoEvento.EVENTO, None),
+        (
+            "Início do ano letivo",
+            "Boas-vindas a alunos e famílias.",
+            date(2026, 2, 2),
+            None,
+            TipoEvento.EVENTO,
+            None,
+        ),
+        (
+            "Reunião de pais — 1º bimestre",
+            "Entrega de boletins e conversa com professores.",
+            date(2026, 4, 18),
+            None,
+            TipoEvento.REUNIAO,
+            None,
+        ),
+        (
+            "Reunião de pais — 2º bimestre",
+            "Entrega de boletins e conversa com professores.",
+            date(2026, 6, 27),
+            None,
+            TipoEvento.REUNIAO,
+            None,
+        ),
+        (
+            "Reunião de pais — 3º bimestre",
+            "Entrega de boletins e conversa com professores.",
+            date(2026, 9, 26),
+            None,
+            TipoEvento.REUNIAO,
+            None,
+        ),
+        (
+            "Reunião de pais — 4º bimestre",
+            "Entrega de boletins finais.",
+            date(2026, 12, 12),
+            None,
+            TipoEvento.REUNIAO,
+            None,
+        ),
+        (
+            "Festa Junina",
+            "Quadrilha, comidas típicas e brincadeiras. Traje caipira.",
+            date(2026, 6, 20),
+            None,
+            TipoEvento.EVENTO,
+            None,
+        ),
         ("Recesso escolar de julho", None, RECESSO[0], RECESSO[1], TipoEvento.OUTRO, None),
-        ("Semana da Criança", "Atividades recreativas durante toda a semana.", date(2026, 10, 5), date(2026, 10, 9), TipoEvento.EVENTO, None),
-        ("Feira de Ciências", "Apresentação dos projetos dos alunos do Fundamental.", date(2026, 10, 24), None, TipoEvento.EVENTO, None),
-        ("Show de Talentos", "Apresentações artísticas dos alunos.", date(2026, 11, 7), None, TipoEvento.EVENTO, None),
-        ("Formatura do 5º ano", "Cerimônia de conclusão do Fundamental I.", date(2026, 12, 17), None, TipoEvento.EVENTO, None),
+        (
+            "Semana da Criança",
+            "Atividades recreativas durante toda a semana.",
+            date(2026, 10, 5),
+            date(2026, 10, 9),
+            TipoEvento.EVENTO,
+            None,
+        ),
+        (
+            "Feira de Ciências",
+            "Apresentação dos projetos dos alunos do Fundamental.",
+            date(2026, 10, 24),
+            None,
+            TipoEvento.EVENTO,
+            None,
+        ),
+        (
+            "Show de Talentos",
+            "Apresentações artísticas dos alunos.",
+            date(2026, 11, 7),
+            None,
+            TipoEvento.EVENTO,
+            None,
+        ),
+        (
+            "Formatura do 5º ano",
+            "Cerimônia de conclusão do Fundamental I.",
+            date(2026, 12, 17),
+            None,
+            TipoEvento.EVENTO,
+            None,
+        ),
         ("Encerramento do ano letivo", None, date(2026, 12, 18), None, TipoEvento.EVENTO, None),
     ]
     for bim, (ini, fim) in enumerate(
-        [(date(2026, 3, 23), date(2026, 3, 27)), (date(2026, 6, 1), date(2026, 6, 5)),
-         (date(2026, 9, 14), date(2026, 9, 18)), (date(2026, 11, 30), date(2026, 12, 4))], start=1
+        [
+            (date(2026, 3, 23), date(2026, 3, 27)),
+            (date(2026, 6, 1), date(2026, 6, 5)),
+            (date(2026, 9, 14), date(2026, 9, 18)),
+            (date(2026, 11, 30), date(2026, 12, 4)),
+        ],
+        start=1,
     ):
-        eventos.append((f"Semana de provas — {bim}º bimestre", "Avaliações de todas as disciplinas.", ini, fim, TipoEvento.PROVA, None))
+        eventos.append(
+            (
+                f"Semana de provas — {bim}º bimestre",
+                "Avaliações de todas as disciplinas.",
+                ini,
+                fim,
+                TipoEvento.PROVA,
+                None,
+            )
+        )
     for turma_id in random.sample(turmas, k=min(6, len(turmas))):
-        eventos.append(("Prova de Matemática", "Conteúdo: capítulos 5 a 8.", date(2026, 10, random.randint(13, 30)), None, TipoEvento.PROVA, turma_id))
-        eventos.append(("Passeio ao museu", "Autorização assinada obrigatória.", date(2026, 11, random.randint(3, 27)), None, TipoEvento.EVENTO, turma_id))
+        eventos.append(
+            (
+                "Prova de Matemática",
+                "Conteúdo: capítulos 5 a 8.",
+                date(2026, 10, random.randint(13, 30)),
+                None,
+                TipoEvento.PROVA,
+                turma_id,
+            )
+        )
+        eventos.append(
+            (
+                "Passeio ao museu",
+                "Autorização assinada obrigatória.",
+                date(2026, 11, random.randint(3, 27)),
+                None,
+                TipoEvento.EVENTO,
+                turma_id,
+            )
+        )
     for titulo, desc, ini, fim, tipo, turma_id in eventos:
-        db.add(EventoCalendario(titulo=titulo, descricao=desc, data_inicio=ini, data_fim=fim,
-                                tipo=tipo, turma_id=turma_id, criado_por_user_id=ADMIN_ID))
+        db.add(
+            EventoCalendario(
+                titulo=titulo,
+                descricao=desc,
+                data_inicio=ini,
+                data_fim=fim,
+                tipo=tipo,
+                turma_id=turma_id,
+                criado_por_user_id=ADMIN_ID,
+            )
+        )
     print(f"[calendario] {len(eventos)} eventos")
 
 
@@ -391,22 +550,111 @@ def secao_avisos(db, turmas: list[int]) -> None:
         print("[avisos] já existem — pulando")
         return
     avisos = [
-        ("Bem-vindos ao ano letivo 2026!", "Desejamos um excelente ano a todos. O calendário completo está disponível no portal.", PublicoAlvo.TODOS, None, True, date(2026, 2, 1)),
-        ("Uniforme obrigatório", "Lembramos que o uso do uniforme completo é obrigatório de segunda a sexta.", PublicoAlvo.RESPONSAVEIS, None, False, date(2026, 2, 9)),
-        ("Reunião pedagógica", "Reunião de planejamento com todos os professores na próxima sexta, às 17h.", PublicoAlvo.PROFESSORES, None, False, date(2026, 3, 10)),
-        ("Vacinação contra a gripe", "Campanha de vacinação na escola em parceria com o posto de saúde. Traga a carteirinha.", PublicoAlvo.RESPONSAVEIS, None, False, date(2026, 4, 6)),
-        ("Festa Junina — como participar", "A festa será no dia 20/06. Contamos com doações de prendas e comidas típicas.", PublicoAlvo.TODOS, None, False, date(2026, 5, 25)),
-        ("Boletim do 2º bimestre disponível", "O boletim já pode ser consultado no portal do responsável.", PublicoAlvo.RESPONSAVEIS, None, False, date(2026, 6, 26)),
-        ("Aviso de recesso", "Recesso escolar de 06 a 17 de julho. As aulas retornam em 20/07.", PublicoAlvo.TODOS, None, False, date(2026, 6, 30)),
-        ("Mensalidades de setembro", "Lembramos que o vencimento é no dia 10. Evite multa e juros pagando em dia.", PublicoAlvo.RESPONSAVEIS, None, False, date(2026, 9, 1)),
-        ("Semana da Criança", "Teremos atividades especiais de 05 a 09/10. Venha com roupa confortável!", PublicoAlvo.TODOS, None, True, date(2026, 10, 1)),
-        ("Feira de Ciências em 24/10", "Os alunos do Fundamental apresentarão seus projetos. Convidamos todas as famílias.", PublicoAlvo.TODOS, None, False, date(2026, 10, 6)),
+        (
+            "Bem-vindos ao ano letivo 2026!",
+            "Desejamos um excelente ano a todos. O calendário completo está disponível no portal.",
+            PublicoAlvo.TODOS,
+            None,
+            True,
+            date(2026, 2, 1),
+        ),
+        (
+            "Uniforme obrigatório",
+            "Lembramos que o uso do uniforme completo é obrigatório de segunda a sexta.",
+            PublicoAlvo.RESPONSAVEIS,
+            None,
+            False,
+            date(2026, 2, 9),
+        ),
+        (
+            "Reunião pedagógica",
+            "Reunião de planejamento com todos os professores na próxima sexta, às 17h.",
+            PublicoAlvo.PROFESSORES,
+            None,
+            False,
+            date(2026, 3, 10),
+        ),
+        (
+            "Vacinação contra a gripe",
+            "Campanha de vacinação na escola em parceria com o posto de "
+            "saúde. Traga a carteirinha.",
+            PublicoAlvo.RESPONSAVEIS,
+            None,
+            False,
+            date(2026, 4, 6),
+        ),
+        (
+            "Festa Junina — como participar",
+            "A festa será no dia 20/06. Contamos com doações de prendas e comidas típicas.",
+            PublicoAlvo.TODOS,
+            None,
+            False,
+            date(2026, 5, 25),
+        ),
+        (
+            "Boletim do 2º bimestre disponível",
+            "O boletim já pode ser consultado no portal do responsável.",
+            PublicoAlvo.RESPONSAVEIS,
+            None,
+            False,
+            date(2026, 6, 26),
+        ),
+        (
+            "Aviso de recesso",
+            "Recesso escolar de 06 a 17 de julho. As aulas retornam em 20/07.",
+            PublicoAlvo.TODOS,
+            None,
+            False,
+            date(2026, 6, 30),
+        ),
+        (
+            "Mensalidades de setembro",
+            "Lembramos que o vencimento é no dia 10. Evite multa e juros pagando em dia.",
+            PublicoAlvo.RESPONSAVEIS,
+            None,
+            False,
+            date(2026, 9, 1),
+        ),
+        (
+            "Semana da Criança",
+            "Teremos atividades especiais de 05 a 09/10. Venha com roupa confortável!",
+            PublicoAlvo.TODOS,
+            None,
+            True,
+            date(2026, 10, 1),
+        ),
+        (
+            "Feira de Ciências em 24/10",
+            "Os alunos do Fundamental apresentarão seus projetos. Convidamos todas as famílias.",
+            PublicoAlvo.TODOS,
+            None,
+            False,
+            date(2026, 10, 6),
+        ),
     ]
     for turma_id in random.sample(turmas, k=min(4, len(turmas))):
-        avisos.append(("Material para o projeto de artes", "Trazer cola, tesoura sem ponta e papel colorido até quinta-feira.", PublicoAlvo.TURMA, turma_id, False, date(2026, 10, random.randint(1, 8))))
+        avisos.append(
+            (
+                "Material para o projeto de artes",
+                "Trazer cola, tesoura sem ponta e papel colorido até quinta-feira.",
+                PublicoAlvo.TURMA,
+                turma_id,
+                False,
+                date(2026, 10, random.randint(1, 8)),
+            )
+        )
     for titulo, corpo, publico, turma_id, fixado, quando in avisos:
-        db.add(Aviso(titulo=titulo, corpo=corpo, publico_alvo=publico, turma_id=turma_id, fixado=fixado,
-                     publicado_por_user_id=ADMIN_ID, publicado_em=_dt(quando, 8)))
+        db.add(
+            Aviso(
+                titulo=titulo,
+                corpo=corpo,
+                publico_alvo=publico,
+                turma_id=turma_id,
+                fixado=fixado,
+                publicado_por_user_id=ADMIN_ID,
+                publicado_em=_dt(quando, 8),
+            )
+        )
     print(f"[avisos] {len(avisos)} avisos")
 
 

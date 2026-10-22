@@ -105,3 +105,24 @@ def headers_for() -> Callable[..., dict[str, str]]:
         return auth_headers(user_id, role, email)
 
     return _make
+
+
+@pytest.fixture
+def concurrent_engine(engine):
+    """Schema descartável para workers que precisam enxergar commits reais."""
+    import uuid
+
+    from sqlalchemy.schema import CreateSchema, DropSchema
+
+    from app.all_models import metadata
+
+    schema = "test_concurrency_" + uuid.uuid4().hex
+    with engine.begin() as conn:
+        conn.execute(CreateSchema(schema))
+    isolated = engine.execution_options(schema_translate_map={None: schema})
+    metadata.create_all(isolated)
+    try:
+        yield isolated
+    finally:
+        with engine.begin() as conn:
+            conn.execute(DropSchema(schema, cascade=True))

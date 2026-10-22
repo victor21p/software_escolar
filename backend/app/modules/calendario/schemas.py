@@ -41,9 +41,12 @@ class EventoCalendarioUpdate(InputSchema):
 
     @model_validator(mode="after")
     def valida_intervalo(self) -> "EventoCalendarioUpdate":
-        if self.data_inicio is not None and self.data_fim is not None:
-            if self.data_fim < self.data_inicio:
-                raise ValueError("data_fim não pode ser anterior a data_inicio.")
+        if (
+            self.data_inicio is not None
+            and self.data_fim is not None
+            and self.data_fim < self.data_inicio
+        ):
+            raise ValueError("data_fim não pode ser anterior a data_inicio.")
         return self
 
 

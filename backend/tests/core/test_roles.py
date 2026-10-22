@@ -5,4 +5,5 @@ def test_role_groups():
     assert Role.RESPONSAVEL not in STAFF
     assert Role.PROFESSOR not in STAFF
     assert set(SECRETARIA_E_ADMIN) == {Role.ADMIN, Role.SECRETARIA}
-    assert len(ALL_ROLES) == 5
+    assert set(ALL_ROLES) == set(Role)
+    assert Role.ALUNO not in STAFF
