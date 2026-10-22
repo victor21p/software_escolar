@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -6,20 +5,13 @@ from pydantic import Field
 
 from app.modules.financeiro.models import StatusCobranca as StatusCobranca
 from app.modules.financeiro.models import TipoCobranca as TipoCobranca
+from app.shared.events import CobrancaPaga as CobrancaPaga
 from app.shared.schemas import InputSchema, OutputSchema
 
 Percentual = Field(ge=0, le=100)
 
 
 # --- Eventos de domínio -------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class CobrancaPaga:
-    """Publicado na transação do pagamento para ativar a matrícula vinculada."""
-
-    cobranca_id: int
-    aluno_id: int
 
 
 # --- Tabela de preços ----------------------------------------------------------------------

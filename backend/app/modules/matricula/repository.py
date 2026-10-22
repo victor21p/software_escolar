@@ -91,3 +91,9 @@ def get_documento(
             DocumentoMatricula.matricula_id == matricula_id, DocumentoMatricula.tipo == tipo
         )
     )
+
+
+def list_ativas_do_ano(db: Session, ano_letivo: int) -> list[Matricula]:
+    return list(db.scalars(select(Matricula).where(
+        Matricula.ano_letivo == ano_letivo, Matricula.status == StatusMatricula.ATIVA
+    )).all())

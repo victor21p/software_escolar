@@ -1,11 +1,4 @@
-"""Regras de negócio do financeiro: cobranças, bolsas, preços e inadimplência.
-
-Simplificações assumidas (ver relatório de implementação):
-- `gerar_mensalidades` não cruza a série do aluno (isso vive em `matricula`/`turmas`, e o
-  módulo `pessoas` não guarda a série do aluno diretamente). Usamos o preço cadastrado em
-  `tabela_precos` para o ano letivo da competência, pegando o primeiro registro daquele ano
-  (sem filtrar por série); se não houver nenhum, usamos um valor padrão fixo de R$ 500,00.
-"""
+"""Cobranças por matrícula, bolsas e tabela de preços por série/ano."""
 
 from datetime import date, timedelta
 from decimal import Decimal
@@ -29,7 +22,9 @@ from app.modules.financeiro.schemas import (
     TabelaPrecoRead,
     TabelaPrecoUpdate,
 )
+from app.modules.matricula import service as matricula_service
 from app.modules.pessoas import service as pessoas_service
+from app.shared.events import MatriculaAprovada
 from app.shared import clock
 from app.shared.pagination import Page
 from app.shared.serie import Serie
@@ -38,7 +33,6 @@ COBRANCA_NAO_ENCONTRADA = "Cobrança não encontrada."
 BOLSA_NAO_ENCONTRADA = "Bolsa não encontrada."
 PRECO_NAO_ENCONTRADO = "Tabela de preço não encontrada."
 
-VALOR_MENSALIDADE_PADRAO = Decimal("500.00")
 
 
 # --- Helpers de conversão ------------------------------------------------------------------
@@ -154,49 +148,39 @@ def criar_cobranca_avulsa(db: Session, data: CobrancaCreate) -> CobrancaRead:
     return _cobranca_read(cobranca)
 
 
-def _valor_mensalidade_do_ano(db: Session, ano_letivo: int) -> Decimal:
-    preco = repository.find_preco_by_ano(db, ano_letivo)
-    if preco is not None:
-        return preco.valor_mensalidade
-    return VALOR_MENSALIDADE_PADRAO
-
-
 def _vencimento_da_competencia(competencia: str) -> date:
-    ano, mes = (int(p) for p in competencia.split("-"))
-    return date(ano, mes, min(settings.dia_vencimento_mensalidade, 28))
+    try:
+        ano, mes = (int(p) for p in competencia.split("-"))
+        if len(competencia) != 7:
+            raise ValueError
+        return date(ano, mes, min(max(settings.dia_vencimento_mensalidade, 1), 28))
+    except ValueError as exc:
+        raise BusinessRuleError("Informe uma competência válida (AAAA-MM).", "COMPETENCIA_INVALIDA") from exc
 
 
 def gerar_mensalidades(db: Session, competencia: str) -> list[CobrancaRead]:
-    """Gera a mensalidade do mês `competencia` (AAAA-MM) para todo aluno ativo.
-
-    Idempotente: não duplica se já existir cobrança MENSALIDADE para aluno+competencia.
-    """
-    ano_letivo = int(competencia.split("-")[0])
-    valor_mensalidade = _valor_mensalidade_do_ano(db, ano_letivo)
+    """Gera por matrícula ativa/ano e preço da série; idempotente inclusive em concorrência."""
     vencimento = _vencimento_da_competencia(competencia)
-
-    # Página grande para cobrir todos os alunos ativos cadastrados.
-    pagina = pessoas_service.list_alunos(db, busca=None, limit=10_000, offset=0)
-
+    matriculas = matricula_service.list_matriculas_faturaveis(db, vencimento.year)
     criadas: list[CobrancaRead] = []
-    for item in pagina.items:
-        if repository.find_mensalidade(db, item.id, competencia) is not None:
+    for matricula in matriculas:
+        if repository.find_mensalidade(db, matricula.aluno_id, competencia) is not None:
             continue
-        percentual = calcular_bolsa_ativa(db, item.id, vencimento)
-        desconto = (valor_mensalidade * percentual / Decimal("100")).quantize(Decimal("0.01"))
-        valor_final = valor_mensalidade - desconto
-        cobranca = Cobranca(
-            aluno_id=item.id,
-            tipo=TipoCobranca.MENSALIDADE,
-            competencia=competencia,
-            valor_original=valor_mensalidade,
-            valor_desconto=desconto,
-            valor_final=valor_final,
-            vencimento=vencimento,
-            status=StatusCobranca.PENDENTE,
-        )
-        repository.add(db, cobranca)
-        criadas.append(_cobranca_read(cobranca))
+        preco = repository.find_preco(db, matricula.serie.value, matricula.ano_letivo)
+        if preco is None:
+            raise BusinessRuleError("Cadastre o preço da série e ano letivo.", "PRECO_NAO_CADASTRADO")
+        percentual = calcular_bolsa_ativa(db, matricula.aluno_id, vencimento)
+        valor = preco.valor_mensalidade
+        desconto = (valor * percentual / Decimal("100")).quantize(Decimal("0.01"))
+        cobranca = repository.add_mensalidade_if_absent(db, {
+            "aluno_id": matricula.aluno_id, "matricula_id": matricula.id,
+            "tipo": TipoCobranca.MENSALIDADE, "competencia": competencia,
+            "valor_original": valor, "valor_desconto": desconto,
+            "valor_final": valor - desconto, "vencimento": vencimento,
+            "status": StatusCobranca.PENDENTE,
+        })
+        if cobranca is not None:
+            criadas.append(_cobranca_read(cobranca))
     db.commit()
     return criadas
 
@@ -243,7 +227,8 @@ def marcar_cobranca_paga(db: Session, cobranca_id: int, user: CurrentUser | None
     cobranca.status = StatusCobranca.PAGA
     cobranca.pago_em = clock.now()
     db.flush()
-    events.publish(db, CobrancaPaga(cobranca_id=cobranca.id, aluno_id=cobranca.aluno_id))
+    events.publish(db, CobrancaPaga(cobranca_id=cobranca.id, aluno_id=cobranca.aluno_id,
+                     matricula_id=cobranca.matricula_id, tipo=cobranca.tipo.value))
     db.commit()
     return _cobranca_read(cobranca)
 
@@ -276,5 +261,12 @@ def create_cobranca_matricula(
         cobranca.status = StatusCobranca.PAGA
         cobranca.pago_em = clock.now()
         db.flush()
-        events.publish(db, CobrancaPaga(cobranca_id=cobranca.id, aluno_id=aluno_id))
+        events.publish(db, CobrancaPaga(cobranca_id=cobranca.id, aluno_id=aluno_id,
+                         matricula_id=matricula_id, tipo=cobranca.tipo.value))
     return _cobranca_read(cobranca)
+
+
+def on_matricula_aprovada(db: Session, event: MatriculaAprovada) -> None:
+    """Cria a taxa na transação da aprovação, sem dependência circular e sem commit."""
+    create_cobranca_matricula(db, matricula_id=event.matricula_id, aluno_id=event.aluno_id,
+                            serie=event.serie, ano_letivo=event.ano_letivo)

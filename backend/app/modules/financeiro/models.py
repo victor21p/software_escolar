@@ -10,6 +10,8 @@ from sqlalchemy import (
     Numeric,
     String,
     UniqueConstraint,
+    Index,
+    text,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -62,6 +64,8 @@ class Bolsa(TimestampMixin, Base):
 
 class Cobranca(Base):
     __tablename__ = "cobrancas"
+    __table_args__ = (Index("uq_cobrancas_mensalidade_aluno_competencia", "aluno_id", "competencia",
+                           unique=True, postgresql_where=text("tipo = 'MENSALIDADE'")),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     aluno_id: Mapped[int] = mapped_column(ForeignKey("alunos.id"), index=True)

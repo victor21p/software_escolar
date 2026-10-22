@@ -9,6 +9,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from app.core import events
 from app.core.audit import record_audit, snapshot
 from app.core.deps import CurrentUser
 from app.core.exceptions import BusinessRuleError, ConflictError, ForbiddenError, NotFoundError
@@ -30,11 +31,10 @@ from app.modules.matricula.schemas import (
     TipoDocumento,
     TipoMatricula,
 )
-from app.modules.financeiro import service as financeiro_service
-from app.modules.financeiro.schemas import CobrancaPaga, StatusCobranca, TipoCobranca
 from app.modules.pessoas import service as pessoas_service
 from app.modules.turmas import service as turmas_service
 from app.shared import clock, storage
+from app.shared.events import CobrancaPaga, MatriculaAprovada
 from app.shared.pagination import Page
 from app.shared.serie import Serie
 from app.shared.state_machine import StateMachine
@@ -315,10 +315,10 @@ def approve_matricula(
     matricula.decidido_por_user_id = actor.id
     matricula.decidido_em = clock.now()
     _transition(matricula, S.AGUARDANDO_PAGAMENTO)
-    financeiro_service.create_cobranca_matricula(
-        db, matricula_id=matricula.id, aluno_id=matricula.aluno_id,
+    events.publish(db, MatriculaAprovada(
+        matricula_id=matricula.id, aluno_id=matricula.aluno_id,
         serie=matricula.serie, ano_letivo=matricula.ano_letivo,
-    )
+    ))
 
     record_audit(
         db,
@@ -491,11 +491,10 @@ def is_aluno_ativo_na_turma(db: Session, aluno_id: int, turma_id: int) -> bool:
 
 def on_cobranca_paga(db: Session, event: CobrancaPaga) -> None:
     """Ativa somente a matrícula da taxa quitada. Não faz commit."""
-    cobranca = financeiro_service.get_cobranca(db, event.cobranca_id)
-    if cobranca.tipo != TipoCobranca.MATRICULA or cobranca.matricula_id is None:
+    if event.tipo != "MATRICULA" or event.matricula_id is None:
         return
-    matricula = _get_or_404(db, cobranca.matricula_id, for_update=True)
-    if cobranca.aluno_id != matricula.aluno_id or cobranca.status != StatusCobranca.PAGA:
+    matricula = _get_or_404(db, event.matricula_id, for_update=True)
+    if event.aluno_id != matricula.aluno_id:
         raise BusinessRuleError("Cobrança incompatível com a matrícula.", "COBRANCA_INCOMPATIVEL")
     if matricula.status == S.ATIVA:
         return
@@ -504,3 +503,10 @@ def on_cobranca_paga(db: Session, event: CobrancaPaga) -> None:
     record_audit(db, actor=None, action="matricula.ativar", entity="matricula",
                  entity_id=matricula.id, before=before, after=snapshot(matricula, AUDIT_FIELDS))
     db.flush()
+
+
+def list_matriculas_faturaveis(db: Session, ano_letivo: int) -> list[MatriculaRead]:
+    """Matrículas ativas do ano, somente de alunos não excluídos. Não faz commit."""
+    rows = repository.list_ativas_do_ano(db, ano_letivo)
+    alunos = {a.id for a in pessoas_service.list_alunos_reads(db, [m.aluno_id for m in rows])}
+    return _to_reads(db, [m for m in rows if m.aluno_id in alunos])

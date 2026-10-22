@@ -7,7 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.core import audit, events
-from app.modules.financeiro.schemas import CobrancaPaga
+from app.modules.financeiro import service as financeiro_service
+from app.shared.events import CobrancaPaga, MatriculaAprovada
 from app.modules.matricula import service as matricula_service
 from app.core.config import settings
 from app.core.deps import DbSession
@@ -42,6 +43,7 @@ ROUTERS: list[APIRouter] = [
 def _register_event_handlers() -> None:
     """Liga os handlers de eventos de domínio entre módulos (ver core/events.py)."""
     events.subscribe(CobrancaPaga, matricula_service.on_cobranca_paga)
+    events.subscribe(MatriculaAprovada, financeiro_service.on_matricula_aprovada)
 
 
 def create_app() -> FastAPI:

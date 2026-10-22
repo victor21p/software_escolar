@@ -116,3 +116,13 @@ def find_preco_by_ano(db: Session, ano_letivo: int) -> TabelaPreco | None:
 
 def list_precos(db: Session) -> list[TabelaPreco]:
     return list(db.scalars(select(TabelaPreco).order_by(TabelaPreco.ano_letivo.desc())).all())
+
+
+def add_mensalidade_if_absent(db: Session, values: dict[str, object]) -> Cobranca | None:
+    """O índice parcial arbitra duas gerações simultâneas sem duplicar cobrança."""
+    from sqlalchemy.dialects.postgresql import insert
+    from sqlalchemy import text
+    stmt = insert(Cobranca).values(**values).on_conflict_do_nothing(
+        index_elements=["aluno_id", "competencia"], index_where=text("tipo = 'MENSALIDADE'")
+    ).returning(Cobranca)
+    return db.scalar(stmt)
