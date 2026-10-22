@@ -68,3 +68,21 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
+
+  containers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validar e iniciar instalação completa
+        run: |
+          docker compose config --quiet
+          docker compose up -d --build --wait --wait-timeout 180
+      - name: Verificar SPA e proxy da API nos quatro portais
+        run: |
+          for port in 8080 8081 8082 8083; do
+            curl --fail --silent "http://localhost:$port/"
+            curl --fail --silent "http://localhost:$port/api/health"
+          done
+      - name: Encerrar containers
+        if: always()
+        run: docker compose down -v
