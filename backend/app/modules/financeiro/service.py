@@ -47,7 +47,10 @@ def _preco_read(preco: TabelaPreco) -> TabelaPrecoRead:
 
 
 def _cobranca_read(cobranca: Cobranca) -> CobrancaRead:
-    return CobrancaRead.model_validate(cobranca)
+    read = CobrancaRead.model_validate(cobranca)
+    if read.status == StatusCobranca.PENDENTE and read.vencimento < clock.today():
+        read.status = StatusCobranca.ATRASADA
+    return read
 
 
 def _get_cobranca_or_404(
@@ -62,11 +65,6 @@ def _get_cobranca_or_404(
 def _data_limite_vencida(hoje: date | None = None) -> date:
     referencia = hoje or clock.today()
     return referencia - timedelta(days=settings.inadimplencia_dias_tolerancia)
-
-
-def _atualizar_atraso(cobranca: Cobranca, hoje: date) -> None:
-    if cobranca.status == StatusCobranca.PENDENTE and cobranca.vencimento < hoje:
-        cobranca.status = StatusCobranca.ATRASADA
 
 
 # --- Bolsas ---------------------------------------------------------------------------------
@@ -202,15 +200,6 @@ def list_cobrancas(
     rows, total = repository.list_cobrancas(
         db, aluno_id=aluno_id, aluno_ids=aluno_ids, status=status, limit=limit, offset=offset
     )
-    hoje = clock.today()
-    atualizadas = False
-    for cobranca in rows:
-        status_antes = cobranca.status
-        _atualizar_atraso(cobranca, hoje)
-        if cobranca.status != status_antes:
-            atualizadas = True
-    if atualizadas:
-        db.commit()
     return Page[CobrancaRead](
         items=[_cobranca_read(c) for c in rows], total=total, limit=limit, offset=offset
     )
@@ -237,7 +226,7 @@ def marcar_cobranca_paga(db: Session, cobranca_id: int, user: CurrentUser | None
 
 
 def is_aluno_inadimplente(db: Session, aluno_id: int) -> bool:
-    """True se o aluno tem cobrança PENDENTE vencida há mais de `inadimplencia_dias_tolerancia`."""
+    """True se o aluno tem cobrança em aberto vencida há mais de `inadimplencia_dias_tolerancia`."""
     data_limite = _data_limite_vencida()
     return len(repository.list_pendentes_vencidas(db, aluno_id, data_limite)) > 0
 

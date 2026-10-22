@@ -30,3 +30,32 @@ def test_invalid_month_is_rejected(client, db, competencia):
     headers = headers_of(make_user(db, Role.ADMIN))
     assert client.post("/api/v1/financeiro/cobrancas/gerar-mensalidades", headers=headers,
                        params={"competencia":competencia}).status_code == 422
+
+
+def test_listing_does_not_clear_debt_or_write_status(client, db):
+    from datetime import date, timedelta
+    from app.modules.financeiro import service
+    from app.modules.financeiro.models import StatusCobranca, TipoCobranca
+    aluno = make_aluno(db)
+    charge = Cobranca(aluno_id=aluno.id, tipo=TipoCobranca.TAXA_EXTRA, valor_original=100,
+                     valor_final=100, valor_desconto=0, vencimento=date.today()-timedelta(days=30),
+                     status=StatusCobranca.PENDENTE)
+    db.add(charge)
+    db.flush()
+    headers = headers_of(make_user(db, Role.ADMIN))
+    assert service.is_aluno_inadimplente(db, aluno.id)
+    response = client.get("/api/v1/financeiro/cobrancas", headers=headers,
+                          params={"status":"ATRASADA"})
+    assert response.json()["total"] == 1
+    assert response.json()["items"][0]["status"] == "ATRASADA"
+    db.refresh(charge)
+    assert charge.status == StatusCobranca.PENDENTE
+    assert service.is_aluno_inadimplente(db, aluno.id)
+    assert client.get("/api/v1/financeiro/cobrancas", headers=headers,
+                      params={"status":"PENDENTE"}).json()["total"] == 0
+    charge.status = StatusCobranca.ATRASADA
+    db.flush()
+    assert service.is_aluno_inadimplente(db, aluno.id)
+    charge.status = StatusCobranca.PAGA
+    db.flush()
+    assert not service.is_aluno_inadimplente(db, aluno.id)

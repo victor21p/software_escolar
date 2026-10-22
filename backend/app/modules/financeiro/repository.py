@@ -1,6 +1,7 @@
 from datetime import date
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, case, func, select
+from app.shared import clock
 from sqlalchemy.orm import Session
 
 from app.modules.financeiro.models import Bolsa, Cobranca, StatusCobranca, TabelaPreco, TipoCobranca
@@ -45,7 +46,11 @@ def _cobrancas_stmt(
     elif aluno_ids is not None:
         stmt = stmt.where(Cobranca.aluno_id.in_(aluno_ids))
     if status is not None:
-        stmt = stmt.where(Cobranca.status == status)
+        status_efetivo = case(
+            ((Cobranca.status == StatusCobranca.PENDENTE) & (Cobranca.vencimento < clock.today()),
+             StatusCobranca.ATRASADA.value), else_=Cobranca.status,
+        )
+        stmt = stmt.where(status_efetivo == status.value)
     return stmt.order_by(Cobranca.vencimento.desc())
 
 
@@ -67,7 +72,7 @@ def list_cobrancas(
 def list_pendentes_vencidas(db: Session, aluno_id: int, data_limite: date) -> list[Cobranca]:
     stmt = select(Cobranca).where(
         Cobranca.aluno_id == aluno_id,
-        Cobranca.status == StatusCobranca.PENDENTE,
+        Cobranca.status.in_([StatusCobranca.PENDENTE, StatusCobranca.ATRASADA]),
         Cobranca.vencimento < data_limite,
     )
     return list(db.scalars(stmt).all())
