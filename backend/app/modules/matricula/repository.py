@@ -13,12 +13,14 @@ def add(db: Session, entity: object) -> None:
     db.flush()
 
 
-def get_matricula(db: Session, matricula_id: int) -> Matricula | None:
+def get_matricula(db: Session, matricula_id: int, *, for_update: bool = False) -> Matricula | None:
     stmt = (
         select(Matricula)
         .where(Matricula.id == matricula_id)
         .options(selectinload(Matricula.documentos))
     )
+    if for_update:
+        stmt = stmt.with_for_update().execution_options(populate_existing=True)
     return db.scalar(stmt)
 
 

@@ -122,3 +122,38 @@ def responsavel_headers(db: Session, responsavel: Responsavel) -> dict[str, str]
     user = db.get(User, responsavel.user_id)
     assert user is not None
     return headers_of(user)
+
+
+def make_turma(db, *, ano_letivo=None, serie=None, turno=None, capacidade=30):
+    from app.modules.turmas.models import Turma
+    from app.shared.serie import Serie, Turno
+    turma = Turma(serie=serie or Serie.ANO_3, ano_letivo=ano_letivo or date.today().year,
+                  turno=turno or Turno.MANHA, capacidade=capacidade, vagas_ocupadas=0, ativa=True)
+    db.add(turma)
+    db.flush()
+    return turma
+
+
+def make_matricula(db, aluno, turma, *, status=None, documentos=True):
+    from app.modules.matricula.models import Matricula, DocumentoMatricula
+    from app.modules.matricula.schemas import StatusMatricula, TipoMatricula, TipoDocumento
+    matricula = Matricula(aluno_id=aluno.id, ano_letivo=turma.ano_letivo,
+                          serie=turma.serie, turno=turma.turno, turma_id=turma.id,
+                          tipo=TipoMatricula.NOVA, status=status or StatusMatricula.EM_ANALISE,
+                          criado_por_user_id=1)
+    db.add(matricula)
+    db.flush()
+    if documentos:
+        db.add_all([DocumentoMatricula(matricula_id=matricula.id, tipo=t, entregue=True)
+                    for t in TipoDocumento])
+        db.flush()
+    return matricula
+
+
+def make_preco(db, turma, *, matricula=100, mensalidade=900):
+    from app.modules.financeiro.models import TabelaPreco
+    preco = TabelaPreco(serie=turma.serie.value, ano_letivo=turma.ano_letivo,
+                       valor_matricula=matricula, valor_mensalidade=mensalidade)
+    db.add(preco)
+    db.flush()
+    return preco

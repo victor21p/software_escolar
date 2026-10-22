@@ -77,6 +77,6 @@ class Cobranca(Base):
         default=StatusCobranca.PENDENTE,
         server_default=StatusCobranca.PENDENTE.value,
     )
-    pago_em: Mapped[datetime | None] = mapped_column(DateTime, default=None)
+    pago_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     gateway_referencia: Mapped[str | None] = mapped_column(String(100), default=None)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), default=clock_now)

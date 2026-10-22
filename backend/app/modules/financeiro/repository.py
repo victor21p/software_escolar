@@ -19,8 +19,11 @@ def delete(db: Session, entity: object) -> None:
 # --- Cobrancas -----------------------------------------------------------------------------
 
 
-def get_cobranca(db: Session, cobranca_id: int) -> Cobranca | None:
-    return db.get(Cobranca, cobranca_id)
+def get_cobranca(db: Session, cobranca_id: int, *, for_update: bool = False) -> Cobranca | None:
+    stmt = select(Cobranca).where(Cobranca.id == cobranca_id)
+    if for_update:
+        stmt = stmt.with_for_update().execution_options(populate_existing=True)
+    return db.scalar(stmt)
 
 
 def find_mensalidade(db: Session, aluno_id: int, competencia: str) -> Cobranca | None:

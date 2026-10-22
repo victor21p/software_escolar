@@ -4,7 +4,8 @@ from decimal import Decimal
 
 from pydantic import Field
 
-from app.modules.financeiro.models import StatusCobranca, TipoCobranca
+from app.modules.financeiro.models import StatusCobranca as StatusCobranca
+from app.modules.financeiro.models import TipoCobranca as TipoCobranca
 from app.shared.schemas import InputSchema, OutputSchema
 
 Percentual = Field(ge=0, le=100)
@@ -15,8 +16,7 @@ Percentual = Field(ge=0, le=100)
 
 @dataclass(frozen=True)
 class CobrancaPaga:
-    """Publicado quando uma cobrança é marcada como paga. O módulo `matricula` pode se
-    inscrever nisso no futuro para ativar a matrícula."""
+    """Publicado na transação do pagamento para ativar a matrícula vinculada."""
 
     cobranca_id: int
     aluno_id: int

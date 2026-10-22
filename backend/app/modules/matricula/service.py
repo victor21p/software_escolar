@@ -30,6 +30,8 @@ from app.modules.matricula.schemas import (
     TipoDocumento,
     TipoMatricula,
 )
+from app.modules.financeiro import service as financeiro_service
+from app.modules.financeiro.schemas import CobrancaPaga, StatusCobranca, TipoCobranca
 from app.modules.pessoas import service as pessoas_service
 from app.modules.turmas import service as turmas_service
 from app.shared import clock, storage
@@ -95,8 +97,8 @@ def _to_read(db: Session, matricula: Matricula) -> MatriculaRead:
     return _to_reads(db, [matricula])[0]
 
 
-def _get_or_404(db: Session, matricula_id: int) -> Matricula:
-    matricula = repository.get_matricula(db, matricula_id)
+def _get_or_404(db: Session, matricula_id: int, *, for_update: bool = False) -> Matricula:
+    matricula = repository.get_matricula(db, matricula_id, for_update=for_update)
     if matricula is None:
         raise NotFoundError(MATRICULA_NAO_ENCONTRADA)
     return matricula
@@ -290,7 +292,7 @@ def start_analise(db: Session, matricula_id: int, actor: CurrentUser) -> Matricu
 def approve_matricula(
     db: Session, matricula_id: int, data: AprovarMatricula, actor: CurrentUser
 ) -> MatriculaRead:
-    matricula = _get_or_404(db, matricula_id)
+    matricula = _get_or_404(db, matricula_id, for_update=True)
     MATRICULA_FSM.ensure(matricula.status, S.APROVADA)
     pendentes = [d.tipo.value for d in matricula.documentos if not d.entregue]
     if pendentes:
@@ -298,7 +300,9 @@ def approve_matricula(
             f"Há documentos pendentes: {', '.join(pendentes)}.", "DOCUMENTOS_PENDENTES"
         )
     turma = turmas_service.get_turma_read(db, data.turma_id)
-    if turma.serie != matricula.serie or turma.ano_letivo != matricula.ano_letivo:
+    if (turma.serie, turma.ano_letivo, turma.turno) != (
+        matricula.serie, matricula.ano_letivo, matricula.turno
+    ):
         raise BusinessRuleError(
             "A turma escolhida não é da mesma série e ano letivo da matrícula.",
             "TURMA_INCOMPATIVEL",
@@ -311,6 +315,10 @@ def approve_matricula(
     matricula.decidido_por_user_id = actor.id
     matricula.decidido_em = clock.now()
     _transition(matricula, S.AGUARDANDO_PAGAMENTO)
+    financeiro_service.create_cobranca_matricula(
+        db, matricula_id=matricula.id, aluno_id=matricula.aluno_id,
+        serie=matricula.serie, ano_letivo=matricula.ano_letivo,
+    )
 
     record_audit(
         db,
@@ -479,3 +487,20 @@ def list_aluno_ids_ativos_da_turma(db: Session, turma_id: int) -> list[int]:
 
 def is_aluno_ativo_na_turma(db: Session, aluno_id: int, turma_id: int) -> bool:
     return aluno_id in list_aluno_ids_ativos_da_turma(db, turma_id)
+
+
+def on_cobranca_paga(db: Session, event: CobrancaPaga) -> None:
+    """Ativa somente a matrícula da taxa quitada. Não faz commit."""
+    cobranca = financeiro_service.get_cobranca(db, event.cobranca_id)
+    if cobranca.tipo != TipoCobranca.MATRICULA or cobranca.matricula_id is None:
+        return
+    matricula = _get_or_404(db, cobranca.matricula_id, for_update=True)
+    if cobranca.aluno_id != matricula.aluno_id or cobranca.status != StatusCobranca.PAGA:
+        raise BusinessRuleError("Cobrança incompatível com a matrícula.", "COBRANCA_INCOMPATIVEL")
+    if matricula.status == S.ATIVA:
+        return
+    before = snapshot(matricula, AUDIT_FIELDS)
+    _transition(matricula, S.ATIVA)
+    record_audit(db, actor=None, action="matricula.ativar", entity="matricula",
+                 entity_id=matricula.id, before=before, after=snapshot(matricula, AUDIT_FIELDS))
+    db.flush()

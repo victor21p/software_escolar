@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.core import events
 from app.core.config import settings
 from app.core.deps import CurrentUser
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import BusinessRuleError, ConflictError, NotFoundError
 from app.modules.financeiro import repository
 from app.modules.financeiro.models import Bolsa, Cobranca, StatusCobranca, TabelaPreco, TipoCobranca
 from app.modules.financeiro.schemas import (
@@ -32,6 +32,7 @@ from app.modules.financeiro.schemas import (
 from app.modules.pessoas import service as pessoas_service
 from app.shared import clock
 from app.shared.pagination import Page
+from app.shared.serie import Serie
 
 COBRANCA_NAO_ENCONTRADA = "Cobrança não encontrada."
 BOLSA_NAO_ENCONTRADA = "Bolsa não encontrada."
@@ -55,8 +56,10 @@ def _cobranca_read(cobranca: Cobranca) -> CobrancaRead:
     return CobrancaRead.model_validate(cobranca)
 
 
-def _get_cobranca_or_404(db: Session, cobranca_id: int) -> Cobranca:
-    cobranca = repository.get_cobranca(db, cobranca_id)
+def _get_cobranca_or_404(
+    db: Session, cobranca_id: int, *, for_update: bool = False
+) -> Cobranca:
+    cobranca = repository.get_cobranca(db, cobranca_id, for_update=for_update)
     if cobranca is None:
         raise NotFoundError(COBRANCA_NAO_ENCONTRADA)
     return cobranca
@@ -230,7 +233,13 @@ def list_cobrancas(
 
 
 def marcar_cobranca_paga(db: Session, cobranca_id: int, user: CurrentUser | None = None) -> CobrancaRead:
-    cobranca = _get_cobranca_or_404(db, cobranca_id)
+    cobranca = _get_cobranca_or_404(db, cobranca_id, for_update=True)
+    if cobranca.status == StatusCobranca.PAGA:
+        return _cobranca_read(cobranca)
+    if cobranca.status == StatusCobranca.CANCELADA:
+        raise ConflictError(
+            "Cobrança cancelada não pode ser paga.", "COBRANCA_CANCELADA"
+        )
     cobranca.status = StatusCobranca.PAGA
     cobranca.pago_em = clock.now()
     db.flush()
@@ -246,3 +255,26 @@ def is_aluno_inadimplente(db: Session, aluno_id: int) -> bool:
     """True se o aluno tem cobrança PENDENTE vencida há mais de `inadimplencia_dias_tolerancia`."""
     data_limite = _data_limite_vencida()
     return len(repository.list_pendentes_vencidas(db, aluno_id, data_limite)) > 0
+
+
+def create_cobranca_matricula(
+    db: Session, *, matricula_id: int, aluno_id: int, serie: Serie, ano_letivo: int
+) -> CobrancaRead:
+    """Cria a taxa de aprovação. Não faz commit: usa a transação da matrícula."""
+    preco = repository.find_preco(db, serie.value, ano_letivo)
+    if preco is None:
+        raise BusinessRuleError("Cadastre o preço da série e ano letivo.", "PRECO_NAO_CADASTRADO")
+    cobranca = Cobranca(
+        aluno_id=aluno_id, matricula_id=matricula_id, tipo=TipoCobranca.MATRICULA,
+        valor_original=preco.valor_matricula, valor_desconto=Decimal("0"),
+        valor_final=preco.valor_matricula,
+        vencimento=clock.today() + timedelta(days=settings.dias_vencimento_matricula),
+        status=StatusCobranca.PENDENTE,
+    )
+    repository.add(db, cobranca)
+    if cobranca.valor_final == 0:
+        cobranca.status = StatusCobranca.PAGA
+        cobranca.pago_em = clock.now()
+        db.flush()
+        events.publish(db, CobrancaPaga(cobranca_id=cobranca.id, aluno_id=aluno_id))
+    return _cobranca_read(cobranca)
