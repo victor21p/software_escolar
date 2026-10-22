@@ -132,9 +132,9 @@ def list_bolsas(
 def create_bolsa(
     payload: BolsaCreate,
     db: DbSession,
-    _: CurrentUser = Depends(require_roles(*permissions.CAN_MANAGE_FINANCEIRO)),
+    actor: CurrentUser = Depends(require_roles(*permissions.CAN_MANAGE_FINANCEIRO)),
 ) -> BolsaRead:
-    return service.create_bolsa(db, payload)
+    return service.create_bolsa(db, payload, actor)
 
 
 @router.patch("/bolsas/{bolsa_id}", response_model=BolsaRead)
@@ -142,9 +142,9 @@ def update_bolsa(
     bolsa_id: int,
     payload: BolsaUpdate,
     db: DbSession,
-    _: CurrentUser = Depends(require_roles(*permissions.CAN_MANAGE_FINANCEIRO)),
+    actor: CurrentUser = Depends(require_roles(*permissions.CAN_MANAGE_FINANCEIRO)),
 ) -> BolsaRead:
-    return service.update_bolsa(db, bolsa_id, payload)
+    return service.update_bolsa(db, bolsa_id, payload, actor)
 
 
 # --- Tabela de preços ---------------------------------------------------------------------------

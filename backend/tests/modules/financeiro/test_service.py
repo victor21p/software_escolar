@@ -196,3 +196,101 @@ def test_simultaneous_monthly_generation_is_idempotent(concurrent_engine):
     assert sum(counts) == 1
     with Session(concurrent_engine) as check:
         assert len(list(check.scalars(select(Cobranca)))) == 1
+
+
+def test_financial_audit_records_actor_before_after_and_no_duplicate_payment(client, db):
+    from datetime import date
+
+    from app.core.audit import AuditLog
+
+    actor = make_user(db, Role.FINANCEIRO)
+    headers = headers_of(actor)
+    aluno = make_aluno(db)
+    base = "/api/v1/financeiro"
+    bolsa = client.post(
+        f"{base}/bolsas",
+        headers=headers,
+        json={
+            "aluno_id": aluno.id,
+            "percentual_desconto": 25,
+            "motivo": "Apoio",
+            "vigencia_inicio": str(date.today()),
+        },
+    )
+    bid = bolsa.json()["id"]
+    assert (
+        client.patch(
+            f"{base}/bolsas/{bid}", headers=headers, json={"percentual_desconto": 50}
+        ).status_code
+        == 200
+    )
+    logs = list(
+        db.scalars(select(AuditLog).where(AuditLog.entity == "bolsa").order_by(AuditLog.id))
+    )
+    assert len(logs) == 2
+    assert logs[0].actor_user_id == actor.id
+    assert logs[0].before is None
+    assert float(logs[1].before["percentual_desconto"]) == 25
+    assert float(logs[1].after["percentual_desconto"]) == 50
+    charge = client.post(
+        f"{base}/cobrancas",
+        headers=headers,
+        json={
+            "aluno_id": aluno.id,
+            "tipo": "TAXA_EXTRA",
+            "valor_original": 125,
+            "vencimento": str(date.today()),
+        },
+    )
+    cid = charge.json()["id"]
+    for _ in range(2):
+        assert (
+            client.post(f"{base}/cobrancas/{cid}/marcar-paga", headers=headers).status_code == 200
+        )
+    payments = list(db.scalars(select(AuditLog).where(AuditLog.action == "cobranca.pagar")))
+    assert len(payments) == 1
+    assert payments[0].actor_user_id == actor.id
+    assert payments[0].before["status"] == "PENDENTE"
+    assert payments[0].after["status"] == "PAGA"
+    assert payments[0].after["origem"] == "manual"
+
+
+def test_signed_webhook_is_audited_as_system_and_replay_is_idempotent(client, db):
+    import hashlib
+    import hmac
+    import json
+    from datetime import date
+
+    from app.core.audit import AuditLog
+    from app.core.config import settings
+
+    aluno = make_aluno(db)
+    headers = headers_of(make_user(db, Role.ADMIN))
+    charge = client.post(
+        "/api/v1/financeiro/cobrancas",
+        headers=headers,
+        json={
+            "aluno_id": aluno.id,
+            "tipo": "TAXA_EXTRA",
+            "valor_original": 100,
+            "vencimento": str(date.today()),
+        },
+    )
+    body = json.dumps({"cobranca_id": charge.json()["id"]}).encode()
+    signature = hmac.new(settings.payment_webhook_secret.encode(), body, hashlib.sha256).hexdigest()
+    url = "/api/v1/financeiro/webhook"
+    assert client.post(url, content=body).status_code == 401
+    for _ in range(2):
+        assert (
+            client.post(
+                url,
+                content=body,
+                headers={"X-Signature": signature, "Content-Type": "application/json"},
+            ).status_code
+            == 200
+        )
+    entries = list(db.scalars(select(AuditLog).where(AuditLog.action == "cobranca.pagar")))
+    assert len(entries) == 1
+    assert entries[0].actor_user_id is None
+    assert entries[0].actor_role == "SISTEMA"
+    assert entries[0].after["origem"] == "webhook"

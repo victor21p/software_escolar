@@ -550,12 +550,12 @@ def _marcar_cobranca_paga(ctx: ToolContext, a: s.CobrancaIdInput) -> Any:
 
 
 def _criar_bolsa(ctx: ToolContext, a: s.CriarBolsaInput) -> Any:
-    return financeiro_service.create_bolsa(ctx.db, a)
+    return financeiro_service.create_bolsa(ctx.db, a, ctx.user)
 
 
 def _atualizar_bolsa(ctx: ToolContext, a: s.AtualizarBolsaInput) -> Any:
     dados = BolsaUpdate(**a.model_dump(exclude_unset=True, exclude={"bolsa_id"}))
-    return financeiro_service.update_bolsa(ctx.db, a.bolsa_id, dados)
+    return financeiro_service.update_bolsa(ctx.db, a.bolsa_id, dados, ctx.user)
 
 
 def _criar_preco(ctx: ToolContext, a: s.CriarPrecoInput) -> Any:

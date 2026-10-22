@@ -6,6 +6,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.core import events
+from app.core.audit import record_audit, snapshot
 from app.core.config import settings
 from app.core.deps import CurrentUser
 from app.core.exceptions import BusinessRuleError, ConflictError, NotFoundError
@@ -32,6 +33,22 @@ from app.shared.serie import Serie
 COBRANCA_NAO_ENCONTRADA = "Cobrança não encontrada."
 BOLSA_NAO_ENCONTRADA = "Bolsa não encontrada."
 PRECO_NAO_ENCONTRADO = "Tabela de preço não encontrada."
+BOLSA_AUDIT_FIELDS = [
+    "aluno_id",
+    "percentual_desconto",
+    "motivo",
+    "vigencia_inicio",
+    "vigencia_fim",
+]
+PAGAMENTO_AUDIT_FIELDS = [
+    "aluno_id",
+    "matricula_id",
+    "status",
+    "valor_original",
+    "valor_desconto",
+    "valor_final",
+    "pago_em",
+]
 
 
 # --- Helpers de conversão ------------------------------------------------------------------
@@ -79,20 +96,38 @@ def list_bolsas(db: Session, *, aluno_id: int | None) -> list[BolsaRead]:
     return [_bolsa_read(b) for b in repository.list_bolsas(db, aluno_id=aluno_id)]
 
 
-def create_bolsa(db: Session, data: BolsaCreate) -> BolsaRead:
+def create_bolsa(db: Session, data: BolsaCreate, actor: CurrentUser) -> BolsaRead:
     pessoas_service.get_aluno_read(db, data.aluno_id)  # 404 se não existir
     bolsa = Bolsa(**data.model_dump())
     repository.add(db, bolsa)
+    record_audit(
+        db,
+        actor=actor,
+        action="bolsa.criar",
+        entity="bolsa",
+        entity_id=bolsa.id,
+        after=snapshot(bolsa, BOLSA_AUDIT_FIELDS),
+    )
     db.commit()
     return _bolsa_read(bolsa)
 
 
-def update_bolsa(db: Session, bolsa_id: int, data: BolsaUpdate) -> BolsaRead:
+def update_bolsa(db: Session, bolsa_id: int, data: BolsaUpdate, actor: CurrentUser) -> BolsaRead:
     bolsa = repository.get_bolsa(db, bolsa_id)
     if bolsa is None:
         raise NotFoundError(BOLSA_NAO_ENCONTRADA)
+    before = snapshot(bolsa, BOLSA_AUDIT_FIELDS)
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(bolsa, field, value)
+    record_audit(
+        db,
+        actor=actor,
+        action="bolsa.alterar",
+        entity="bolsa",
+        entity_id=bolsa.id,
+        before=before,
+        after=snapshot(bolsa, BOLSA_AUDIT_FIELDS),
+    )
     db.commit()
     return _bolsa_read(bolsa)
 
@@ -221,6 +256,7 @@ def marcar_cobranca_paga(
         return _cobranca_read(cobranca)
     if cobranca.status == StatusCobranca.CANCELADA:
         raise ConflictError("Cobrança cancelada não pode ser paga.", "COBRANCA_CANCELADA")
+    before = snapshot(cobranca, PAGAMENTO_AUDIT_FIELDS)
     cobranca.status = StatusCobranca.PAGA
     cobranca.pago_em = clock.now()
     db.flush()
@@ -232,6 +268,18 @@ def marcar_cobranca_paga(
             matricula_id=cobranca.matricula_id,
             tipo=cobranca.tipo.value,
         ),
+    )
+    record_audit(
+        db,
+        actor=user,
+        action="cobranca.pagar",
+        entity="cobranca",
+        entity_id=cobranca.id,
+        before=before,
+        after={
+            **snapshot(cobranca, PAGAMENTO_AUDIT_FIELDS),
+            "origem": "manual" if user else "webhook",
+        },
     )
     db.commit()
     return _cobranca_read(cobranca)
@@ -265,6 +313,7 @@ def create_cobranca_matricula(
     )
     repository.add(db, cobranca)
     if cobranca.valor_final == 0:
+        before = snapshot(cobranca, PAGAMENTO_AUDIT_FIELDS)
         cobranca.status = StatusCobranca.PAGA
         cobranca.pago_em = clock.now()
         db.flush()
@@ -276,6 +325,15 @@ def create_cobranca_matricula(
                 matricula_id=matricula_id,
                 tipo=cobranca.tipo.value,
             ),
+        )
+        record_audit(
+            db,
+            actor=None,
+            action="cobranca.pagar",
+            entity="cobranca",
+            entity_id=cobranca.id,
+            before=before,
+            after={**snapshot(cobranca, PAGAMENTO_AUDIT_FIELDS), "origem": "taxa_isenta"},
         )
     return _cobranca_read(cobranca)
 
