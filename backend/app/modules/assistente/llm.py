@@ -52,6 +52,8 @@ class DeepSeekClient:
         self._timeout = timeout
 
     def chat(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> LLMResponse:
+        if not self._api_key.strip():
+            raise LLMIndisponivelError()
         payload: dict[str, Any] = {
             "model": self._model,
             "messages": messages,

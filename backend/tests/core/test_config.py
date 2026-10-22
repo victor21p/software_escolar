@@ -25,3 +25,13 @@ def test_development_defaults_are_usable():
     cfg = Settings(environment="development")
     assert cfg.access_token_expire_minutes <= 30
     assert cfg.payment_gateway == "fake"
+
+
+def test_ai_key_has_no_bundled_default(monkeypatch):
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    assert Settings(_env_file=None).deepseek_api_key == ""
+
+
+def test_ai_key_can_be_supplied_by_environment(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-environment-key")
+    assert Settings(_env_file=None).deepseek_api_key == "test-environment-key"
