@@ -26,6 +26,7 @@ from app.modules.turmas import service as turmas_service
 
 def _ensure_pode_lancar(db: Session, turma_id: int, user: CurrentUser) -> None:
     """ADMIN/SECRETARIA sempre podem; PROFESSOR só se leciona nesta turma."""
+    turmas_service.get_turma_read(db, turma_id)
     if user.role == Role.PROFESSOR and not turmas_service.is_professor_da_turma(
         db, turma_id, user.id
     ):
@@ -68,8 +69,7 @@ def list_grade(db: Session, turma_id: int, periodo: Periodo, user: CurrentUser) 
 def upsert_nota(
     db: Session, turma_id: int, aluno_id: int, data: NotaUpsert, user: CurrentUser
 ) -> NotaRead:
-    _ensure_pode_lancar(db, turma_id, user)
-    pessoas_service.get_aluno_read(db, aluno_id)  # 404 se o aluno não existir
+    ensure_pode_lancar_nota(db, turma_id, aluno_id, user)
 
     nota = repository.get_nota(db, aluno_id, turma_id, data.disciplina, data.periodo)
     if nota is None:
@@ -142,3 +142,10 @@ def get_boletim(db: Session, aluno_id: int, user: CurrentUser) -> BoletimRead:
 
 def list_disciplinas() -> list[str]:
     return DISCIPLINAS
+
+
+def ensure_pode_lancar_nota(db: Session, turma_id: int, aluno_id: int, user: CurrentUser) -> None:
+    """Permissão de escrita compartilhada pela API e pelo preview do assistente."""
+    _ensure_pode_lancar(db, turma_id, user)
+    if not matricula_service.is_aluno_ativo_na_turma(db, aluno_id, turma_id):
+        raise NotFoundError("Aluno não está matriculado (ativo) nesta turma.")

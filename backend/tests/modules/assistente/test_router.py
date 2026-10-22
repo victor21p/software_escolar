@@ -511,3 +511,15 @@ def test_message_validation(client, admin):
     conversa_id = _nova_conversa(client, headers)
     assert _enviar(client, headers, conversa_id, "").status_code == 422
     assert _enviar(client, headers, conversa_id, "x" * 2001).status_code == 422
+
+
+def test_assistant_refuses_student_outside_turma(client, db, admin, turma, usar_llm):
+    aluno_sem_matricula = make_aluno(db)
+    fake = usar_llm(chamar("lancar_nota", turma_id=turma.id, aluno_id=aluno_sem_matricula.id,
+                         disciplina="Artes", periodo="BIMESTRE_1", valor=7), texto("Sem vínculo."))
+    headers = headers_of(admin)
+    conversa_id = _nova_conversa(client, headers)
+    response = _enviar(client, headers, conversa_id)
+    assert not [m for m in response.json()["mensagens"] if m["role"] == "acao"]
+    assert "NOT_FOUND" in fake.ultimas_mensagens_tool()[0]["content"]
+    assert _notas(db) == []

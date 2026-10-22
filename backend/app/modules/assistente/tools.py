@@ -760,6 +760,7 @@ def _pv_documento(ctx: ToolContext, a: s.DocumentoMatriculaInput) -> str:
 
 
 def _pv_lancar_nota(ctx: ToolContext, a: s.LancarNotaInput) -> str:
+    notas_service.ensure_pode_lancar_nota(ctx.db, a.turma_id, a.aluno_id, ctx.user)
     aluno = _aluno(ctx, a.aluno_id)
     turma = _turma(ctx, a.turma_id)
     atual = notas_service.find_nota(ctx.db, a.aluno_id, a.turma_id, a.disciplina, a.periodo)
