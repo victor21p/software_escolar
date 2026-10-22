@@ -510,3 +510,8 @@ def list_matriculas_faturaveis(db: Session, ano_letivo: int) -> list[MatriculaRe
     rows = repository.list_ativas_do_ano(db, ano_letivo)
     alunos = {a.id for a in pessoas_service.list_alunos_reads(db, [m.aluno_id for m in rows])}
     return _to_reads(db, [m for m in rows if m.aluno_id in alunos])
+
+
+def list_turma_ids_ativas_dos_alunos(db: Session, aluno_ids: list[int]) -> list[int]:
+    """IDs de turmas para avisos das famílias. Não faz commit."""
+    return repository.list_turma_ids_ativas_dos_alunos(db, aluno_ids)

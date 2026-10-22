@@ -3,7 +3,7 @@
 from sqlalchemy.orm import Session
 
 from app.core.deps import CurrentUser
-from app.core.exceptions import ForbiddenError, NotFoundError
+from app.core.exceptions import BusinessRuleError, ForbiddenError, NotFoundError
 from app.core.roles import Role
 from app.modules.comunicacao import repository
 from app.modules.comunicacao.models import Aviso
@@ -14,6 +14,7 @@ from app.modules.comunicacao.schemas import (
     NaoLidosTotal,
     PublicoAlvo,
 )
+from app.modules.matricula import service as matricula_service
 from app.modules.pessoas import service as pessoas_service
 from app.modules.turmas import service as turmas_service
 from app.shared.pagination import Page
@@ -39,15 +40,21 @@ def _turma_ids_visiveis(db: Session, user: CurrentUser) -> list[int]:
     """Turmas cujos avisos TURMA o usuário pode ver.
 
     PROFESSOR: turmas em que leciona.
-    RESPONSAVEL: simplificação — não filtramos pelas turmas dos filhos (ver nota no
-    relatório da tarefa); o responsável só vê TODOS e RESPONSAVEIS, então aqui retorna [].
+    RESPONSAVEL e ALUNO: turmas das matrículas ativas dos alunos vinculados.
     """
     if user.role == Role.PROFESSOR:
         professor = pessoas_service.get_professor_by_user(db, user.id)
         if professor is None:
             return []
         return [t.id for t in turmas_service.list_minhas_turmas(db, user)]
-    return []
+    if user.role == Role.RESPONSAVEL:
+        alunos = pessoas_service.list_aluno_ids_do_usuario(db, user)
+    elif user.role == Role.ALUNO:
+        aluno = pessoas_service.get_aluno_by_user(db, user.id)
+        alunos = [aluno.id] if aluno else []
+    else:
+        return []
+    return matricula_service.list_turma_ids_ativas_dos_alunos(db, alunos)
 
 
 def _to_read(aviso: Aviso, *, lido: bool) -> AvisoRead:
@@ -102,6 +109,8 @@ def create_aviso(db: Session, data: AvisoCreate, user: CurrentUser) -> AvisoRead
             )
         if not turmas_service.is_professor_da_turma(db, data.turma_id, user.id):
             raise ForbiddenError("Você não leciona nesta turma.")
+    if data.turma_id is not None:
+        turmas_service.get_turma_read(db, data.turma_id)
     aviso = Aviso(
         titulo=data.titulo,
         corpo=data.corpo,
@@ -129,6 +138,15 @@ def update_aviso(db: Session, aviso_id: int, data: AvisoUpdate, user: CurrentUse
     novo_turma_id = changes.get("turma_id", aviso.turma_id)
     if novo_publico == PublicoAlvo.TURMA and novo_turma_id is None:
         raise ForbiddenError("turma_id é obrigatório quando publico_alvo é TURMA.")
+    if novo_publico != PublicoAlvo.TURMA and novo_turma_id is not None:
+        raise BusinessRuleError("turma_id só pode ser informado para TURMA.", "PUBLICO_INVALIDO")
+    if user.role == Role.PROFESSOR:
+        if novo_publico != PublicoAlvo.TURMA or novo_turma_id is None:
+            raise ForbiddenError("Professores só podem publicar para a própria turma.")
+        if not turmas_service.is_professor_da_turma(db, novo_turma_id, user.id):
+            raise ForbiddenError("Você não leciona nesta turma.")
+    elif novo_turma_id is not None:
+        turmas_service.get_turma_read(db, novo_turma_id)
     for field, value in changes.items():
         setattr(aviso, field, value)
     db.commit()
@@ -145,6 +163,13 @@ def delete_aviso(db: Session, aviso_id: int, user: CurrentUser) -> None:
 
 
 def marcar_lido(db: Session, aviso_id: int, user: CurrentUser) -> None:
-    _get_or_404(db, aviso_id)
+    aviso = _get_or_404(db, aviso_id)
+    if not _ve_tudo(user) and not (
+        aviso.publico_alvo in _publicos_visiveis(user) or (
+            aviso.publico_alvo == PublicoAlvo.TURMA
+            and aviso.turma_id in _turma_ids_visiveis(db, user)
+        )
+    ):
+        raise NotFoundError(AVISO_NAO_ENCONTRADO)
     repository.marcar_lido(db, aviso_id, user.id)
     db.commit()
